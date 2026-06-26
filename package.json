@@ -1,0 +1,22 @@
+{
+  "name": "bot-hospitality-2026",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node src/monitor.js --once --match M70,M86",
+    "watch": "node src/monitor.js --match M70,M86 --interval 60",
+    "dashboard": "node src/dashboard.js",
+    "list-dallas": "node src/monitor.js --once --venue NN_DAL",
+    "telegram:test": "node src/telegramTest.js",
+    "telegram:updates": "node src/telegramTest.js updates",
+    "service:status": "launchctl print gui/$(id -u)/com.matias.fifa-hospitality-monitor",
+    "service:logs": "tail -n 80 /Users/matiasmassetti/.fifa-hospitality-monitor/.state/launchd.out.log /Users/matiasmassetti/.fifa-hospitality-monitor/.state/launchd.err.log",
+    "service:stop": "launchctl bootout gui/$(id -u) /Users/matiasmassetti/Library/LaunchAgents/com.matias.fifa-hospitality-monitor.plist",
+    "service:start": "launchctl bootstrap gui/$(id -u) /Users/matiasmassetti/Library/LaunchAgents/com.matias.fifa-hospitality-monitor.plist",
+    "service:sync": "scripts/sync-runtime.sh"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
