@@ -23,12 +23,13 @@ Cuando una alerta usa `all`, el bot consulta también lounges/secciones y elige 
 
 El monitor escucha por defecto:
 
-- `M70` - Jordan vs Argentina, Dallas Stadium
-- `M86` - Argentina vs 2H, Miami Stadium
+- `M86` - Argentina vs Cabo Verde, Miami Stadium
+- `M95`
+- `M100`
 
 ## Comandos
 
-Chequeo puntual de M70 y M86, por defecto sólo `Suite Essentials`:
+Chequeo puntual de M86, M95 y M100, por defecto en todas las categorías:
 
 ```bash
 npm run check
@@ -49,13 +50,13 @@ npm run list-dallas
 Ejemplos directos:
 
 ```bash
-node src/monitor.js --once --match M70
-node src/monitor.js --once --match M70,M86
-node src/monitor.js --match M70 --interval 30
+node src/monitor.js --once --match M86
+node src/monitor.js --once --match M86,M95,M100 --all-sections
+node src/monitor.js --match M86 --all-sections --interval 30
 node src/monitor.js --once --venue NN_DAL
 node src/monitor.js --once --team Argentina
-node src/monitor.js --once --match M70 --all-sections
-node src/monitor.js --once --match M70 --section "VIP Lounge"
+node src/monitor.js --once --match M100 --all-sections
+node src/monitor.js --once --match M86 --section "VIP Lounge"
 ```
 
 El monitor guarda estado en `.state/hospitality-monitor.json` para detectar el cambio `unavailable -> available` por sección y emitir `ALERT:`.
@@ -102,14 +103,15 @@ El bot también responde `/start` con una bienvenida en español. Si existe `ass
 Comandos disponibles para usuarios:
 
 ```text
-/seguir M70 Suite Essentials
 /seguir M86 all
+/seguir M95 all
+/seguir M100 all
 /seguir M86 VIP
 /precios M86
 /prioridades
 /prioridad <chatId> <numero>
 /lista
-/quitar M70
+/quitar M100
 /reiniciar
 /ayuda
 ```

@@ -23,7 +23,7 @@ const TELEGRAM_BOT_STATE_FILE = ".state/telegram-bot.json";
 const SUBSCRIPTIONS_FILE = ".state/subscriptions.json";
 const CART_ALLOCATIONS_KEY = "__cartAllocations";
 const DEFAULT_SECTION = "Suite Essentials";
-const DEFAULT_MATCHES = "M70,M86";
+const DEFAULT_MATCHES = "M86,M95,M100";
 const COMMAND_POLL_INTERVAL_SECONDS = 1;
 const CART_EXPIRY_MINUTES = 15;
 const START_IMAGE_CANDIDATES = [
@@ -34,8 +34,9 @@ const START_IMAGE_CANDIDATES = [
 ];
 
 const DEFAULT_SUBSCRIPTIONS = [
-  { match: "M70", section: DEFAULT_SECTION, allSections: false },
-  { match: "M86", section: DEFAULT_SECTION, allSections: false }
+  { match: "M86", allSections: true },
+  { match: "M95", allSections: true },
+  { match: "M100", allSections: true }
 ];
 
 const SECTION_ALIASES = new Map([
@@ -103,15 +104,15 @@ function parseArgs(argv) {
 
 function printHelp() {
   console.log(`Usage:
-  node src/monitor.js --once --match M70
-  node src/monitor.js --once --match M70,M86
-  node src/monitor.js --match M70 --interval 60
+  node src/monitor.js --once --match M86
+  node src/monitor.js --once --match M86,M95,M100 --all-sections
+  node src/monitor.js --match M86 --all-sections --interval 60
   node src/monitor.js --once --venue NN_DAL
   node src/monitor.js --once --team Argentina
-  node src/monitor.js --once --match M70 --all-sections
+  node src/monitor.js --once --match M100 --all-sections
 
 Options:
-  --match M70,M86              Match number(s) to watch. Defaults to M70,M86.
+  --match M86,M95,M100         Match number(s) to watch. Defaults to M86,M95,M100.
   --venue NN_DAL               Optional venue filter.
   --team Argentina             Optional team name filter.
   --section "Suite Essentials" Seating section to watch. Defaults to Suite Essentials.
@@ -341,16 +342,16 @@ function mainMenuKeyboard() {
         { text: "Estado", callback_data: "estado" }
       ],
       [
-        { text: "Precios M70", callback_data: "precios:M70" },
-        { text: "Precios M86", callback_data: "precios:M86" }
+        { text: "Precios M86", callback_data: "precios:M86" },
+        { text: "Precios M95", callback_data: "precios:M95" },
+        { text: "Precios M100", callback_data: "precios:M100" }
       ],
       [
-        { text: "Seguir M70 Suite Essentials", callback_data: "seguir:M70:suite" },
-        { text: "Seguir M70 todas", callback_data: "seguir:M70:all" }
+        { text: "Seguir M86 todas", callback_data: "seguir:M86:all" },
+        { text: "Seguir M95 todas", callback_data: "seguir:M95:all" }
       ],
       [
-        { text: "Seguir M86 Suite Essentials", callback_data: "seguir:M86:suite" },
-        { text: "Seguir M86 todas", callback_data: "seguir:M86:all" }
+        { text: "Seguir M100 todas", callback_data: "seguir:M100:all" }
       ],
       [
         { text: "Otro partido Suite", callback_data: "otro:suite" },
@@ -530,8 +531,8 @@ function baseWelcomeLines() {
     "Hola! Soy el bot de Hospitality 2026.",
     "Creado por Matias Massetti.",
     "",
-    "Por defecto ya estoy mirando M70 Jordania vs Argentina y M86 Argentina vs 2H en la categoría más barata de hospitality: Suite Essentials.",
-    "Precio aprox. de referencia: M70 desde USD 1,350. En M86 Suite Essentials no aparece ofrecida ahora; cuando exista o se libere, te aviso.",
+    "Por defecto ya estoy mirando M86, M95 y M100 en todas las categorías de hospitality.",
+    "Si aparece disponibilidad en cualquiera de esos partidos, te aviso y preparo carrito automático según prioridad si está activado.",
     "",
     "Si aparece disponibilidad, te mando una alerta con partido, sede, precio y link.",
     "",
@@ -541,7 +542,7 @@ function baseWelcomeLines() {
     "",
     "Usá los botones para cambiar alertas, ver precios o seguir otros partidos.",
     "",
-    "Los precios son valores 'desde' y pueden cambiar. Tocá Precios M70 o Precios M86 para verlos actualizados."
+    "Los precios son valores 'desde' y pueden cambiar. Tocá Precios M86, M95 o M100 para verlos actualizados."
   ];
 }
 
@@ -1035,8 +1036,9 @@ function helpMessage() {
     "",
     "También podés usar los botones de abajo para configurar tus alertas.",
     "",
-    "/seguir M70 Suite Essentials",
     "/seguir M86 all",
+    "/seguir M95 all",
+    "/seguir M100 all",
     "/seguir M86 VIP",
     "/precios M86",
     "/prioridades",
@@ -1044,7 +1046,7 @@ function helpMessage() {
     "/lista",
     "/menu",
     "/estado",
-    "/quitar M70",
+    "/quitar M100",
     "/reiniciar",
     "/start",
     "",
@@ -1132,7 +1134,7 @@ async function handleTelegramCommands() {
 
       if (data === "reiniciar") {
         setChatSubscriptions(subscriptionsState, chatId, DEFAULT_SUBSCRIPTIONS);
-        await sendTelegramMessage("Listo. Volví a M70 y M86 con Suite Essentials.", {
+        await sendTelegramMessage("Listo. Volví a M86, M95 y M100 en todas las categorías.", {
           chatId,
           replyMarkup: mainMenuKeyboard()
         });
@@ -1332,7 +1334,7 @@ async function handleTelegramCommands() {
     if (command === "/watch" || command === "/seguir") {
       const subscription = parseWatchCommand(text);
       if (!subscription || !isValidMatchNumber(subscription.match)) {
-        await sendTelegramMessage("Uso: /seguir M70 Suite Essentials o /seguir M86 all", { chatId });
+        await sendTelegramMessage("Uso: /seguir M86 all, /seguir M95 all o /seguir M100 all", { chatId });
         continue;
       }
 
@@ -1356,7 +1358,7 @@ async function handleTelegramCommands() {
     if (command === "/remove" || command === "/quitar") {
       const match = normalizeMatchInput(text.split(/\s+/)[1]);
       if (!match) {
-        await sendTelegramMessage("Uso: /quitar M70", { chatId });
+        await sendTelegramMessage("Uso: /quitar M100", { chatId });
         continue;
       }
 
@@ -1372,7 +1374,7 @@ async function handleTelegramCommands() {
 
     if (command === "/reset" || command === "/reiniciar") {
       setChatSubscriptions(subscriptionsState, chatId, DEFAULT_SUBSCRIPTIONS);
-      await sendTelegramMessage("Listo. Volví a M70 y M86 con Suite Essentials.", {
+      await sendTelegramMessage("Listo. Volví a M86, M95 y M100 en todas las categorías.", {
         chatId,
         replyMarkup: mainMenuKeyboard()
       });

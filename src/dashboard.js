@@ -11,8 +11,9 @@ const port = Number(process.env.PORT || process.env.DASHBOARD_PORT || DEFAULT_PO
 const stateDir = process.env.DASHBOARD_STATE_DIR
   || (existsSync(RUNTIME_STATE_DIR) ? RUNTIME_STATE_DIR : LOCAL_STATE_DIR);
 const DEFAULT_SUBSCRIPTIONS = [
-  { match: "M70", section: "Suite Essentials", allSections: false },
-  { match: "M86", section: "Suite Essentials", allSections: false }
+  { match: "M86", allSections: true },
+  { match: "M95", allSections: true },
+  { match: "M100", allSections: true }
 ];
 
 async function readJson(path, fallback) {
