@@ -21,9 +21,11 @@ import {
 const DEFAULT_STATE_FILE = ".state/hospitality-monitor.json";
 const TELEGRAM_BOT_STATE_FILE = ".state/telegram-bot.json";
 const SUBSCRIPTIONS_FILE = ".state/subscriptions.json";
+const CART_ALLOCATIONS_KEY = "__cartAllocations";
 const DEFAULT_SECTION = "Suite Essentials";
 const DEFAULT_MATCHES = "M70,M86";
 const COMMAND_POLL_INTERVAL_SECONDS = 1;
+const CART_EXPIRY_MINUTES = 15;
 const START_IMAGE_CANDIDATES = [
   "assets/la-banda-argentina.png",
   "assets/la-banda-argentina.jpg",
@@ -184,6 +186,55 @@ function normalizeSectionInput(value) {
   return { section: raw, allSections: false };
 }
 
+function autoCartEnabled() {
+  return String(process.env.AUTO_CART_ENABLED || "").toLowerCase() === "true";
+}
+
+function adminChatIds() {
+  return new Set(
+    String(process.env.ADMIN_CHAT_IDS || process.env.TELEGRAM_CHAT_ID || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
+  );
+}
+
+function isAdminChat(chatId) {
+  return adminChatIds().has(String(chatId));
+}
+
+function userPriority(chatState = {}) {
+  const value = Number(chatState.user?.priority ?? chatState.priority ?? 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function compareUserPriority(aChatState, bChatState) {
+  const aPriority = userPriority(aChatState);
+  const bPriority = userPriority(bChatState);
+  const aRanked = aPriority > 0;
+  const bRanked = bPriority > 0;
+
+  if (aRanked && !bRanked) return -1;
+  if (!aRanked && bRanked) return 1;
+  if (aRanked && bRanked && aPriority !== bPriority) return aPriority - bPriority;
+  return 0;
+}
+
+function setUserPriority(subscriptionsState, chatId, priority) {
+  const key = String(chatId);
+  subscriptionsState.chats = subscriptionsState.chats || {};
+  const current = subscriptionsState.chats[key] || {};
+  subscriptionsState.chats[key] = {
+    ...current,
+    priority,
+    user: {
+      ...(current.user || {}),
+      chatId: key,
+      priority
+    }
+  };
+}
+
 function subscriptionKey(subscription) {
   const scope = subscription.allSections
     ? "all"
@@ -235,9 +286,11 @@ function rememberChat(subscriptionsState, chatId, chat = {}, from = {}) {
   const key = String(chatId);
   subscriptionsState.chats = subscriptionsState.chats || {};
   const current = subscriptionsState.chats[key] || {};
+  const priority = userPriority(current);
   const user = {
     ...(current.user || {}),
     chatId: key,
+    priority,
     chatType: chat.type,
     chatTitle: chat.title,
     username: from.username || chat.username || current.user?.username,
@@ -250,6 +303,7 @@ function rememberChat(subscriptionsState, chatId, chat = {}, from = {}) {
 
   subscriptionsState.chats[key] = {
     ...current,
+    priority,
     user
   };
 }
@@ -385,6 +439,12 @@ function formatSummary(summary) {
   return `${summary.match} ${summary.teams} | ${summary.venueCode} | ${status}${priceText}${anyMatchAvailability}`;
 }
 
+function cartAllocationKey(summaryOrMatch, sectionCode) {
+  const match = typeof summaryOrMatch === "string" ? summaryOrMatch : summaryOrMatch.match;
+  const code = sectionCode || summaryOrMatch.selectedSectionCode;
+  return `${match}:${String(code || "").toUpperCase()}`;
+}
+
 function matchUrl(summary) {
   return `https://fifaworldcup26.hospitality.fifa.com/us/en/choose-matches?venue=${summary.venueCode}`;
 }
@@ -448,6 +508,23 @@ function formatTelegramAlertForSubscription(summary, subscription) {
   ].join("\n");
 }
 
+function formatAutoCartMessage({ summary, option, cart }) {
+  const expiresAt = new Date(Date.now() + CART_EXPIRY_MINUTES * 60 * 1000);
+
+  return [
+    "Carrito FIFA asignado",
+    "",
+    `${summary.match} - ${summary.teams}`,
+    `${option.sectionName}: ${formatMoney(option.amount)} x 1`,
+    `Total: ${formatMoney(cart.SelectionTotalAmount ?? option.amount)}`,
+    "",
+    cart.CheckoutRedirectUrl,
+    "",
+    `Este link abre el carrito oficial de FIFA y suele expirar en aprox. ${CART_EXPIRY_MINUTES} minutos (${expiresAt.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}).`,
+    "No hice checkout ni pago."
+  ].join("\n");
+}
+
 function baseWelcomeLines() {
   return [
     "Hola! Soy el bot de Hospitality 2026.",
@@ -493,6 +570,31 @@ function formatSubscriptionsBlock(subscriptions) {
     "Tus alertas:",
     ...subscriptions.map((subscription) => `- ${formatSubscription(subscription)}`)
   ];
+}
+
+function prioritiesMessage(subscriptionsState) {
+  const chats = Object.entries(subscriptionsState.chats || {})
+    .map(([chatId, chatState]) => {
+      const user = chatState.user || {};
+      const name = user.username
+        ? `@${user.username}`
+        : [user.firstName, user.lastName].filter(Boolean).join(" ") || user.chatTitle || `Chat ${chatId}`;
+      return {
+        chatId,
+        name,
+        priority: userPriority(chatState),
+        alerts: chatState.subscriptions?.length || 0
+      };
+    })
+    .sort((a, b) => b.priority - a.priority || a.chatId.localeCompare(b.chatId));
+
+  if (!chats.length) return "Todavía no tengo usuarios guardados.";
+
+  return [
+    "Prioridades",
+    "",
+    ...chats.map((chat) => `${chat.priority} - ${chat.name} (${chat.chatId}, ${chat.alerts} alertas)`)
+  ].join("\n");
 }
 
 async function buildWelcomeMessage(chatId, subscriptionsState) {
@@ -567,6 +669,7 @@ async function buildStatusMessage(chatId, subscriptionsState) {
     `Tus alertas: ${currentSubscriptions.length}`,
     `Chats con alertas: ${chatEntries.length}`,
     `Alertas totales: ${savedAlertsCount}`,
+    `Auto-carrito: ${autoCartEnabled() ? "activo" : "apagado"}`,
     "",
     "El bot revisa disponibilidad cada 60 segundos."
   ].join("\n");
@@ -666,6 +769,109 @@ async function summarizeSubscription(match, subscription) {
   return summarizeMatch(match, { hospitalityOptions });
 }
 
+export function selectAutoCartWinners(allocationCandidates, allocations = {}) {
+  const grouped = new Map();
+
+  for (const candidate of allocationCandidates) {
+    const key = cartAllocationKey(candidate.summary);
+    if (!candidate.summary.cartOption || allocations[key]?.active) continue;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(candidate);
+  }
+
+  return [...grouped.entries()].map(([key, candidates]) => {
+    candidates.sort((a, b) => {
+      const priorityDiff = compareUserPriority(a.chatState, b.chatState);
+      if (priorityDiff !== 0) return priorityDiff;
+
+      const aTime = a.chatState.user?.firstSeenAt || "";
+      const bTime = b.chatState.user?.firstSeenAt || "";
+      const timeDiff = aTime.localeCompare(bTime);
+      if (timeDiff !== 0) return timeDiff;
+
+      return String(a.chatId).localeCompare(String(b.chatId));
+    });
+
+    return { key, winner: candidates[0] };
+  });
+}
+
+async function allocateAutoCarts({ allocationCandidates, nextState }) {
+  const assignedKeys = new Set();
+  if (!autoCartEnabled() || !telegramIsConfigured() || !allocationCandidates.length) return assignedKeys;
+
+  const allocations = { ...(nextState[CART_ALLOCATIONS_KEY] || {}) };
+
+  for (const { key, winner } of selectAutoCartWinners(allocationCandidates, allocations)) {
+    const option = winner.summary.cartOption;
+    let cart;
+
+    try {
+      cart = await createSingleMatchCart({
+        performanceId: winner.summary.performanceId,
+        option,
+        quantity: 1
+      });
+
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + CART_EXPIRY_MINUTES * 60 * 1000);
+      allocations[key] = {
+        active: true,
+        allocationKey: key,
+        chatId: String(winner.chatId),
+        priority: userPriority(winner.chatState),
+        match: winner.summary.match,
+        teams: winner.summary.teams,
+        sectionCode: option.sectionCode,
+        sectionName: option.sectionName,
+        amount: option.amount,
+        orderId: cart.OrderId,
+        checkoutRedirectUrl: cart.CheckoutRedirectUrl,
+        allocatedAt: now.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        notifiedAt: null,
+        error: null
+      };
+
+      await sendTelegramMessage(formatAutoCartMessage({ summary: winner.summary, option, cart }), {
+        chatId: winner.chatId,
+        replyMarkup: mainMenuKeyboard()
+      });
+
+      allocations[key] = {
+        ...allocations[key],
+        notifiedAt: new Date().toISOString()
+      };
+      assignedKeys.add(`${winner.chatId}:${key}`);
+      console.log(`Auto cart assigned: ${key} to chat ${winner.chatId}`);
+    } catch (error) {
+      allocations[key] = allocations[key] || {
+        active: true,
+        allocationKey: key,
+        chatId: String(winner.chatId),
+        priority: userPriority(winner.chatState),
+        match: winner.summary.match,
+        teams: winner.summary.teams,
+        sectionCode: option.sectionCode,
+        sectionName: option.sectionName,
+        amount: option.amount,
+        allocatedAt: new Date().toISOString(),
+        notifiedAt: null
+      };
+      allocations[key] = {
+        ...allocations[key],
+        checkoutRedirectUrl: allocations[key].checkoutRedirectUrl || cart?.CheckoutRedirectUrl,
+        orderId: allocations[key].orderId || cart?.OrderId,
+        error: error.message
+      };
+      console.error(`[${new Date().toISOString()}] Auto cart failed for ${key}: ${error.message}`);
+    }
+  }
+
+  nextState[CART_ALLOCATIONS_KEY] = allocations;
+  return assignedKeys;
+}
+
 async function checkSubscriptions() {
   const subscriptionsState = normalizeSubscriptionState(await readState(SUBSCRIPTIONS_FILE));
   const chatEntries = Object.entries(subscriptionsState.chats || {});
@@ -674,6 +880,10 @@ async function checkSubscriptions() {
   const matches = await fetchSingleMatchInventory();
   const state = await readState(DEFAULT_STATE_FILE);
   const nextState = { ...state };
+  const allocations = { ...(state[CART_ALLOCATIONS_KEY] || {}) };
+  const allocationCandidates = [];
+  const manualAlertCandidates = [];
+  const activeAllocationKeys = new Set();
   let checkedCount = 0;
 
   for (const [chatId, chatState] of chatEntries) {
@@ -705,12 +915,14 @@ async function checkSubscriptions() {
       const becameAvailable = summary.isAvailable && previous?.isAvailable === false;
       const firstSeenAvailable = summary.isAvailable && previous == null;
 
+      if (summary.isAvailable && summary.selectedSectionCode) {
+        const allocationKey = cartAllocationKey(summary);
+        activeAllocationKeys.add(allocationKey);
+        allocationCandidates.push({ chatId, chatState, subscription, summary });
+      }
+
       if (becameAvailable || firstSeenAvailable) {
-        await sendTelegramMessage(formatTelegramAlertForSubscription(summary, subscription), {
-          chatId,
-          replyMarkup: matchUrlKeyboard(summary)
-        });
-        console.log(`Telegram sent: ${summary.match} to chat ${chatId}`);
+        manualAlertCandidates.push({ chatId, subscription, summary });
       }
 
       nextState[key] = {
@@ -724,6 +936,31 @@ async function checkSubscriptions() {
         error: null,
         checkedAt: new Date().toISOString()
       };
+    }
+  }
+
+  for (const key of Object.keys(allocations)) {
+    if (!activeAllocationKeys.has(key)) {
+      delete allocations[key];
+    }
+  }
+  nextState[CART_ALLOCATIONS_KEY] = allocations;
+
+  const autoAssignedKeys = await allocateAutoCarts({ allocationCandidates, nextState });
+
+  if (telegramIsConfigured()) {
+    for (const candidate of manualAlertCandidates) {
+      const allocationKey = candidate.summary.selectedSectionCode
+        ? cartAllocationKey(candidate.summary)
+        : null;
+      const autoAssignedKey = allocationKey ? `${candidate.chatId}:${allocationKey}` : null;
+      if (autoAssignedKey && autoAssignedKeys.has(autoAssignedKey)) continue;
+
+      await sendTelegramMessage(formatTelegramAlertForSubscription(candidate.summary, candidate.subscription), {
+        chatId: candidate.chatId,
+        replyMarkup: matchUrlKeyboard(candidate.summary)
+      });
+      console.log(`Telegram sent: ${candidate.summary.match} to chat ${candidate.chatId}`);
     }
   }
 
@@ -802,6 +1039,8 @@ function helpMessage() {
     "/seguir M86 all",
     "/seguir M86 VIP",
     "/precios M86",
+    "/prioridades",
+    "/prioridad <chatId> <numero>",
     "/lista",
     "/menu",
     "/estado",
@@ -812,7 +1051,7 @@ function helpMessage() {
     "Categorías útiles: Suite Essentials, VIP, Pitchside, Trophy, Champions, FIFA Pavilion, all.",
     "Podés usar cualquier partido del M1 al M104. Ejemplo: /seguir M75 all.",
     "",
-    "Este bot no es oficial de FIFA. Puede crear un link de carrito cuando tocás el botón, pero no hace checkout ni compra entradas.",
+    "Este bot no es oficial de FIFA. Puede crear un link de carrito cuando tocás el botón, o automáticamente si AUTO_CART_ENABLED=true, pero no hace checkout ni compra entradas.",
     "",
     "También acepto los comandos anteriores en inglés: /watch, /prices, /list, /remove, /reset, /help."
   ].join("\n");
@@ -1056,6 +1295,40 @@ async function handleTelegramCommands() {
       continue;
     }
 
+    if (command === "/priorities" || command === "/prioridades") {
+      if (!isAdminChat(chatId)) {
+        await sendTelegramMessage("Ese comando es sólo para admin.", { chatId });
+        continue;
+      }
+
+      await sendTelegramMessage(prioritiesMessage(subscriptionsState), {
+        chatId,
+        replyMarkup: mainMenuKeyboard()
+      });
+      continue;
+    }
+
+    if (command === "/priority" || command === "/prioridad") {
+      if (!isAdminChat(chatId)) {
+        await sendTelegramMessage("Ese comando es sólo para admin.", { chatId });
+        continue;
+      }
+
+      const [, targetChatId, rawPriority] = text.split(/\s+/);
+      const priority = Number(rawPriority);
+      if (!targetChatId || !Number.isFinite(priority)) {
+        await sendTelegramMessage("Uso: /prioridad <chatId> <numero>", { chatId });
+        continue;
+      }
+
+      setUserPriority(subscriptionsState, targetChatId, priority);
+      await sendTelegramMessage(`Listo. Prioridad de ${targetChatId}: ${priority}`, {
+        chatId,
+        replyMarkup: mainMenuKeyboard()
+      });
+      continue;
+    }
+
     if (command === "/watch" || command === "/seguir") {
       const subscription = parseWatchCommand(text);
       if (!subscription || !isValidMatchNumber(subscription.match)) {
@@ -1204,4 +1477,6 @@ async function main() {
   } while (true);
 }
 
-main();
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
+}

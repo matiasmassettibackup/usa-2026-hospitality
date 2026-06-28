@@ -70,6 +70,7 @@ El monitor guarda estado en `.state/hospitality-monitor.json` para detectar el c
 ```bash
 TELEGRAM_BOT_TOKEN=123456789:replace_me
 TELEGRAM_CHAT_ID=123456789
+AUTO_CART_ENABLED=false
 ```
 
 Para obtener tu `TELEGRAM_CHAT_ID` después de mandarle un mensaje al bot:
@@ -88,6 +89,14 @@ Cuando `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` están configurados, `npm run w
 
 Las alertas incluyen la sección exacta y cantidad disponible si FIFA la informa. El botón `Crear carrito` vuelve a validar disponibilidad y, si la sección sigue disponible, crea una orden en FIFA y responde con el link oficial de carrito. El botón `Abrir FIFA manual` queda como fallback.
 
+Si `AUTO_CART_ENABLED=true`, el monitor puede crear el carrito automáticamente cuando detecta disponibilidad en una alerta guardada. Por seguridad viene apagado por defecto. Con el auto-carrito activo:
+
+- se crea sólo un carrito por evento de disponibilidad y sección;
+- gana el usuario que esté escuchando ese partido/sección con mayor prioridad global;
+- las alertas `all` participan para cualquier sección disponible del partido;
+- los usuarios no ganadores reciben la alerta normal, pero no un carrito prearmado;
+- el link abre el carrito oficial de FIFA, pero el bot no hace checkout ni pago.
+
 El bot también responde `/start` con una bienvenida en español. Si existe `assets/la-banda-argentina.jpg`, la manda como foto junto al mensaje.
 
 Comandos disponibles para usuarios:
@@ -97,11 +106,15 @@ Comandos disponibles para usuarios:
 /seguir M86 all
 /seguir M86 VIP
 /precios M86
+/prioridades
+/prioridad <chatId> <numero>
 /lista
 /quitar M70
 /reiniciar
 /ayuda
 ```
+
+`/prioridad` y `/prioridades` son comandos admin. Por defecto el admin es `TELEGRAM_CHAT_ID`; se puede configurar una lista separada con `ADMIN_CHAT_IDS=123,456`.
 
 Las preferencias se guardan localmente por chat en:
 
@@ -148,7 +161,7 @@ El ejemplo anterior corresponde a M86, `FIFA Pavilion`, qty 1 al momento de inve
 
 La respuesta devuelve `OrderId`, `OrderSecretId`, `SelectionTotalAmount`, `TransactionDetails` y `CheckoutRedirectUrl`. Crear la orden no hace checkout ni pago. El checkout empieza recién al abrir `CheckoutRedirectUrl`.
 
-En Telegram, el bot no crea órdenes automáticamente al detectar disponibilidad. Sólo llama a `/next-api/orders` cuando el usuario toca `Crear carrito` en la alerta.
+En Telegram, el bot sólo llama automáticamente a `/next-api/orders` cuando `AUTO_CART_ENABLED=true`. Si está apagado, sólo crea órdenes cuando el usuario toca `Crear carrito` en la alerta.
 
 ## Correr 24/7 en macOS
 

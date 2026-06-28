@@ -98,6 +98,7 @@ async function buildDashboardData() {
       chatId,
       name: userName(chatId, user),
       username: user.username || null,
+      priority: Number(user.priority ?? chatState.priority ?? 0) || 0,
       chatType: user.chatType || null,
       firstSeenAt: user.firstSeenAt || null,
       lastSeenAt: user.lastSeenAt || null,
@@ -334,6 +335,7 @@ function htmlPage() {
         user.chatId,
         user.name,
         user.username,
+        String(user.priority),
         user.chatType,
         ...user.alerts.flatMap((alert) => [alert.match, alert.category, alert.status])
       ].filter(Boolean).join(" ").toLowerCase();
@@ -364,8 +366,8 @@ function htmlPage() {
         return '<article class="user">'
           + '<div class="user-header">'
           + '<div><div class="user-name">' + user.name + '</div>'
-          + '<div class="meta">Chat ID: ' + user.chatId + ' · Última actividad: ' + formatDate(user.lastSeenAt) + '</div></div>'
-          + '<span class="badge">' + user.alertCount + ' alertas</span>'
+          + '<div class="meta">Chat ID: ' + user.chatId + ' · Prioridad: ' + user.priority + ' · Última actividad: ' + formatDate(user.lastSeenAt) + '</div></div>'
+          + '<span class="badge">' + user.alertCount + ' alertas · P' + user.priority + '</span>'
           + '</div>'
           + '<table><thead><tr><th>Partido</th><th>Categoría</th><th>Estado</th><th>Precio</th><th>Chequeado</th></tr></thead><tbody>'
           + rows
