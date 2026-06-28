@@ -146,8 +146,9 @@ export function summarizeMatch(match, { hospitalityOptions } = {}) {
     minAvailablePrice: minOption?.amount ?? null,
     cheapestSelectedPrice: cheapestSelectedOption?.amount ?? null,
     cheapestLounge: minOption?.loungeName || minOption?.sectionName || null,
-    selectedSection: cheapestSelectedOption?.sectionName || minOption?.sectionName || null,
-    selectedSectionCode: cheapestSelectedOption?.sectionCode || minOption?.sectionCode || null,
+    selectedSection: minOption?.sectionName || minOption?.loungeName || cheapestSelectedOption?.sectionName || cheapestSelectedOption?.loungeName || null,
+    selectedSectionCode: minOption?.sectionCode || cheapestSelectedOption?.sectionCode || null,
+    availableQuantity: minOption?.availableQuantity ?? null,
     availableOptions,
     selectedOptions
   };

@@ -391,7 +391,7 @@ function matchUrlKeyboard(summary) {
   return {
     inline_keyboard: [
       [
-        { text: "Abrir FIFA Hospitality", url: matchUrl(summary) }
+        { text: "Abrir y agregar al carrito", url: matchUrl(summary) }
       ],
       [
         { text: "Mis alertas", callback_data: "lista" },
@@ -404,32 +404,34 @@ function matchUrlKeyboard(summary) {
 function formatTelegramAlert(summary) {
   const price = formatMoney(summary.minAvailablePrice ?? summary.cheapestSelectedPrice);
   const section = summary.selectedSection || summary.cheapestLounge || "Hospitality";
+  const quantity = summary.availableQuantity ? ` (${summary.availableQuantity} disp.)` : "";
 
   return [
     "Alerta FIFA Hospitality",
     "",
     `${summary.match} - ${summary.teams}`,
-    `${section}: DISPONIBLE desde ${price}`,
+    `${section}: DISPONIBLE desde ${price}${quantity}`,
     `${summary.venue || summary.venueCode}${summary.city ? `, ${summary.city}` : ""}`,
     `${summary.date} ${summary.dayTime}`,
     "",
-    "Usá el botón de abajo para abrir FIFA."
+    `Abrí FIFA, elegí "${section}" y tocá Select para sumarlo a My Matches.`
   ].join("\n");
 }
 
 function formatTelegramAlertForSubscription(summary, subscription) {
   const price = formatMoney(summary.minAvailablePrice ?? summary.cheapestSelectedPrice);
   const section = summary.selectedSection || summary.cheapestLounge || subscription.section || "Hospitality";
+  const quantity = summary.availableQuantity ? ` (${summary.availableQuantity} disp.)` : "";
 
   return [
     "Alerta FIFA Hospitality",
     "",
     `${summary.match} - ${summary.teams}`,
-    `${section}: DISPONIBLE desde ${price}`,
+    `${section}: DISPONIBLE desde ${price}${quantity}`,
     `${summary.venue || summary.venueCode}${summary.city ? `, ${summary.city}` : ""}`,
     `${summary.date} ${summary.dayTime}`,
     "",
-    "Usá el botón de abajo para abrir FIFA."
+    `Abrí FIFA, elegí "${section}" y tocá Select para sumarlo a My Matches.`
   ].join("\n");
 }
 
@@ -577,12 +579,11 @@ async function checkOnce(options) {
   }
 
   const summaries = await Promise.all(filteredMatches.map(async (match) => {
-    if (options.allSections) return summarizeMatch(match);
-
     const lounges = await fetchSingleMatchLounges(match.PerformanceId);
     const hospitalityOptions = getHospitalityOptions(lounges, {
       section: options.section,
-      sectionCode: options.sectionCode
+      sectionCode: options.sectionCode,
+      allSections: options.allSections
     });
 
     return summarizeMatch(match, { hospitalityOptions });
@@ -607,6 +608,7 @@ async function checkOnce(options) {
       cheapestLounge: summary.cheapestLounge,
       selectedSection: summary.selectedSection,
       selectedSectionCode: summary.selectedSectionCode,
+      availableQuantity: summary.availableQuantity,
       isOffered: summary.isOffered,
       checkedAt: new Date().toISOString()
     };
@@ -641,12 +643,11 @@ async function checkOnce(options) {
 }
 
 async function summarizeSubscription(match, subscription) {
-  if (subscription.allSections) return summarizeMatch(match);
-
   const lounges = await fetchSingleMatchLounges(match.PerformanceId);
   const hospitalityOptions = getHospitalityOptions(lounges, {
     section: subscription.section,
-    sectionCode: subscription.sectionCode
+    sectionCode: subscription.sectionCode,
+    allSections: subscription.allSections
   });
 
   return summarizeMatch(match, { hospitalityOptions });
@@ -705,6 +706,7 @@ async function checkSubscriptions() {
         cheapestSelectedPrice: summary.cheapestSelectedPrice,
         selectedSection: summary.selectedSection,
         selectedSectionCode: summary.selectedSectionCode,
+        availableQuantity: summary.availableQuantity,
         isOffered: summary.isOffered,
         error: null,
         checkedAt: new Date().toISOString()

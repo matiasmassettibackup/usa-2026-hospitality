@@ -1,6 +1,6 @@
 # FIFA Hospitality Availability Monitor
 
-Primer paso del bot: detectar disponibilidad sin Telegram todavía.
+Bot local para monitorear disponibilidad de FIFA Hospitality 2026, avisar por Telegram y abrir el flujo oficial de compra.
 
 La página de FIFA Hospitality carga una app Next.js y usa este endpoint interno para single matches:
 
@@ -8,19 +8,18 @@ La página de FIFA Hospitality carga una app Next.js y usa este endpoint interno
 https://fifaworldcup26.hospitality.fifa.com/next-api/matches-all?productCode=26FWC&productType=5
 ```
 
-Ese endpoint sirve para saber qué partidos existen y si hay alguna categoría disponible. Para la categoría específica que nos importa por defecto, `Suite Essentials`, el monitor usa una segunda llamada:
+Ese endpoint sirve para saber qué partidos existen y si hay alguna categoría disponible. Para conocer la sección exacta disponible, el monitor usa una segunda llamada:
 
 ```text
 https://fifaworldcup26.hospitality.fifa.com/next-api/lounges?productCode=26FWC&productTypeCode=SM&quantity=1&performanceId=...
 ```
 
-La señal útil para `Suite Essentials` está en:
+La señal útil de disponibilidad está en:
 
-- `seatingSections[].Name === "Suite Essentials"`
 - `seatingSections[].IsAvailable === true`
 - `seatingSections[].AvailableQuantity > 0`
 
-En M70, `Suite Essentials` aparece como sección `MEL`, pero actualmente no disponible.
+Cuando una alerta usa `all`, el bot consulta también lounges/secciones y elige una sección realmente disponible, no sólo el precio "desde" del match.
 
 El monitor escucha por defecto:
 
@@ -87,6 +86,8 @@ npm run telegram:test
 
 Cuando `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` están configurados, `npm run watch` manda Telegram automáticamente sólo cuando detecta que la sección monitoreada pasa a disponible.
 
+Las alertas incluyen la sección exacta y cantidad disponible si FIFA la informa. El botón de Telegram abre FIFA Hospitality y el texto guía al usuario para seleccionar esa sección y sumarla a `MY MATCHES`.
+
 El bot también responde `/start` con una bienvenida en español. Si existe `assets/la-banda-argentina.jpg`, la manda como foto junto al mensaje.
 
 Comandos disponibles para usuarios:
@@ -107,6 +108,45 @@ Las preferencias se guardan localmente por chat en:
 ```text
 /Users/matiasmassetti/.fifa-hospitality-monitor/.state/subscriptions.json
 ```
+
+## Carrito FIFA
+
+La web crea carrito/orden sin login con este endpoint interno:
+
+```text
+POST https://fifaworldcup26.hospitality.fifa.com/next-api/orders
+```
+
+Headers mínimos observados:
+
+```text
+Content-Type: application/json
+country-tag: us
+language-tag: en
+```
+
+Payload para single match:
+
+```json
+{
+  "ProductType": 5,
+  "ProductCode": "26FWC",
+  "OrderId": 0,
+  "PartnerId": "",
+  "SelectedQuantity": 1,
+  "PackageSelectionData": {
+    "SeatCategoryId": 10229236268047,
+    "AudienceSubCategoryId": 10229206883474,
+    "InstitutionSeatCategoryId": 10229203839377,
+    "PackageLineId": 0,
+    "PerformanceId": 10229203824844
+  }
+}
+```
+
+El ejemplo anterior corresponde a M86, `FIFA Pavilion`, qty 1 al momento de investigarlo. Los IDs deben salir siempre de los endpoints vivos de `matches-all` y `lounges`; no deben hardcodearse para producción.
+
+La respuesta devuelve `OrderId`, `OrderSecretId`, `SelectionTotalAmount`, `TransactionDetails` y `CheckoutRedirectUrl`. Crear la orden no hace checkout ni pago. El checkout empieza recién al abrir `CheckoutRedirectUrl`.
 
 ## Correr 24/7 en macOS
 
