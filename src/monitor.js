@@ -2,6 +2,7 @@ import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { loadDotEnv } from "./config.js";
 import {
+  createSingleMatchCart,
   fetchSingleMatchLounges,
   fetchSingleMatchInventory,
   filterMatches,
@@ -367,6 +368,7 @@ async function safelySendChatAction(chatId, action = "typing") {
 
 function callbackAnswerText(data) {
   if (data === "estado") return "Calculando estado...";
+  if (data.startsWith("cart:")) return "Creando carrito...";
   if (data === "precios_otro" || data.startsWith("precios:")) return "Buscando precios...";
   if (data === "menu" || data === "ayuda" || data === "lista") return undefined;
   return "Listo";
@@ -388,16 +390,27 @@ function matchUrl(summary) {
 }
 
 function matchUrlKeyboard(summary) {
+  const buttons = [];
+
+  if (summary.selectedSectionCode) {
+    buttons.push([
+      {
+        text: "Crear carrito",
+        callback_data: `cart:${summary.match}:${summary.selectedSectionCode}`
+      }
+    ]);
+  }
+
+  buttons.push([
+    { text: "Abrir FIFA manual", url: matchUrl(summary) }
+  ]);
+  buttons.push([
+    { text: "Mis alertas", callback_data: "lista" },
+    { text: "Estado", callback_data: "estado" }
+  ]);
+
   return {
-    inline_keyboard: [
-      [
-        { text: "Abrir y agregar al carrito", url: matchUrl(summary) }
-      ],
-      [
-        { text: "Mis alertas", callback_data: "lista" },
-        { text: "Estado", callback_data: "estado" }
-      ]
-    ]
+    inline_keyboard: buttons
   };
 }
 
@@ -414,7 +427,7 @@ function formatTelegramAlert(summary) {
     `${summary.venue || summary.venueCode}${summary.city ? `, ${summary.city}` : ""}`,
     `${summary.date} ${summary.dayTime}`,
     "",
-    `Abrí FIFA, elegí "${section}" y tocá Select para sumarlo a My Matches.`
+    "Tocá Crear carrito para generar el link oficial de FIFA. No compra ni hace checkout."
   ].join("\n");
 }
 
@@ -431,7 +444,7 @@ function formatTelegramAlertForSubscription(summary, subscription) {
     `${summary.venue || summary.venueCode}${summary.city ? `, ${summary.city}` : ""}`,
     `${summary.date} ${summary.dayTime}`,
     "",
-    `Abrí FIFA, elegí "${section}" y tocá Select para sumarlo a My Matches.`
+    "Tocá Crear carrito para generar el link oficial de FIFA. No compra ni hace checkout."
   ].join("\n");
 }
 
@@ -445,7 +458,7 @@ function baseWelcomeLines() {
     "",
     "Si aparece disponibilidad, te mando una alerta con partido, sede, precio y link.",
     "",
-    "Aviso: este bot no es oficial de FIFA. Solo avisa disponibilidad; no reserva ni compra entradas.",
+    "Aviso: este bot no es oficial de FIFA. Puede crear un link de carrito cuando tocás el botón, pero no hace checkout ni compra entradas.",
     "",
     "Chequeo cada 60 segundos.",
     "",
@@ -741,6 +754,44 @@ async function buildPricesMessage(matchInput) {
   return lines.join("\n");
 }
 
+async function createCartMessage(matchInput, sectionCode) {
+  const matchNumber = normalizeMatchInput(matchInput);
+  if (!matchNumber || !sectionCode) return "No pude identificar el partido/sección para crear el carrito.";
+
+  const match = filterMatches(await fetchSingleMatchInventory(), { match: matchNumber })[0];
+  if (!match) return `No encontré ${matchNumber}.`;
+
+  const lounges = await fetchSingleMatchLounges(match.PerformanceId);
+  const hospitalityOptions = getHospitalityOptions(lounges, { sectionCode });
+  const option = hospitalityOptions.find((item) => item.isAvailable);
+
+  if (!option) {
+    return [
+      `No pude crear carrito para ${matchNumber}.`,
+      "",
+      "FIFA ya no muestra esa sección como disponible. Probá con /precios para ver qué queda."
+    ].join("\n");
+  }
+
+  const cart = await createSingleMatchCart({
+    performanceId: match.PerformanceId,
+    option,
+    quantity: 1
+  });
+
+  return [
+    "Carrito FIFA creado",
+    "",
+    `${matchNumber} ${match.HostTeam?.ExternalName || "TBD"} vs ${match.OpposingTeam?.ExternalName || "TBD"}`,
+    `${option.sectionName}: ${formatMoney(option.amount)} x 1`,
+    `Total: ${formatMoney(cart.SelectionTotalAmount)}`,
+    "",
+    cart.CheckoutRedirectUrl,
+    "",
+    "Ese link abre el carrito oficial. No hice checkout ni pago."
+  ].join("\n");
+}
+
 function helpMessage() {
   return [
     "Comandos disponibles:",
@@ -761,7 +812,7 @@ function helpMessage() {
     "Categorías útiles: Suite Essentials, VIP, Pitchside, Trophy, Champions, FIFA Pavilion, all.",
     "Podés usar cualquier partido del M1 al M104. Ejemplo: /seguir M75 all.",
     "",
-    "Este bot no es oficial de FIFA. Solo avisa disponibilidad; no reserva ni compra entradas.",
+    "Este bot no es oficial de FIFA. Puede crear un link de carrito cuando tocás el botón, pero no hace checkout ni compra entradas.",
     "",
     "También acepto los comandos anteriores en inglés: /watch, /prices, /list, /remove, /reset, /help."
   ].join("\n");
@@ -846,6 +897,29 @@ async function handleTelegramCommands() {
           chatId,
           replyMarkup: mainMenuKeyboard()
         });
+        continue;
+      }
+
+      if (data.startsWith("cart:")) {
+        const [, matchInput, sectionCode] = data.split(":");
+        await safelySendChatAction(chatId);
+        try {
+          await sendTelegramMessage(await createCartMessage(matchInput, sectionCode), {
+            chatId,
+            replyMarkup: mainMenuKeyboard()
+          });
+        } catch (error) {
+          await sendTelegramMessage([
+            "No pude crear el carrito en FIFA.",
+            "",
+            error.message,
+            "",
+            "Probá abrir FIFA manualmente desde la alerta o revisá /precios."
+          ].join("\n"), {
+            chatId,
+            replyMarkup: mainMenuKeyboard()
+          });
+        }
         continue;
       }
 

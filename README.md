@@ -86,7 +86,7 @@ npm run telegram:test
 
 Cuando `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` están configurados, `npm run watch` manda Telegram automáticamente sólo cuando detecta que la sección monitoreada pasa a disponible.
 
-Las alertas incluyen la sección exacta y cantidad disponible si FIFA la informa. El botón de Telegram abre FIFA Hospitality y el texto guía al usuario para seleccionar esa sección y sumarla a `MY MATCHES`.
+Las alertas incluyen la sección exacta y cantidad disponible si FIFA la informa. El botón `Crear carrito` vuelve a validar disponibilidad y, si la sección sigue disponible, crea una orden en FIFA y responde con el link oficial de carrito. El botón `Abrir FIFA manual` queda como fallback.
 
 El bot también responde `/start` con una bienvenida en español. Si existe `assets/la-banda-argentina.jpg`, la manda como foto junto al mensaje.
 
@@ -147,6 +147,8 @@ Payload para single match:
 El ejemplo anterior corresponde a M86, `FIFA Pavilion`, qty 1 al momento de investigarlo. Los IDs deben salir siempre de los endpoints vivos de `matches-all` y `lounges`; no deben hardcodearse para producción.
 
 La respuesta devuelve `OrderId`, `OrderSecretId`, `SelectionTotalAmount`, `TransactionDetails` y `CheckoutRedirectUrl`. Crear la orden no hace checkout ni pago. El checkout empieza recién al abrir `CheckoutRedirectUrl`.
+
+En Telegram, el bot no crea órdenes automáticamente al detectar disponibilidad. Sólo llama a `/next-api/orders` cuando el usuario toca `Crear carrito` en la alerta.
 
 ## Correr 24/7 en macOS
 

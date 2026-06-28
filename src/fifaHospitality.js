@@ -3,6 +3,7 @@ const BASE_URL = "https://fifaworldcup26.hospitality.fifa.com";
 const PRODUCT_CODE = "26FWC";
 const PRODUCT_TYPE_SINGLE_MATCH = 5;
 const PRODUCT_TYPE_CODE_SINGLE_MATCH = "SM";
+const DEFAULT_QUANTITY = 1;
 
 const DEFAULT_HEADERS = {
   accept: "application/json, text/plain, */*",
@@ -39,6 +40,38 @@ export async function fetchSingleMatchLounges(performanceId, { quantity = 1, sig
   return parseJsonResponse(response);
 }
 
+export async function createSingleMatchCart({ performanceId, option, quantity = DEFAULT_QUANTITY, partnerId = "", signal } = {}) {
+  if (!performanceId) throw new Error("Missing performanceId for cart creation");
+  if (!option) throw new Error("Missing hospitality option for cart creation");
+
+  const response = await fetch(new URL("/next-api/orders", BASE_URL), {
+    method: "POST",
+    signal,
+    headers: {
+      ...DEFAULT_HEADERS,
+      "content-type": "application/json",
+      "country-tag": "us",
+      "language-tag": "en"
+    },
+    body: JSON.stringify({
+      ProductType: PRODUCT_TYPE_SINGLE_MATCH,
+      ProductCode: PRODUCT_CODE,
+      OrderId: 0,
+      PartnerId: partnerId,
+      SelectedQuantity: quantity,
+      PackageSelectionData: {
+        SeatCategoryId: option.seatCategoryId,
+        AudienceSubCategoryId: option.audSubCategoryId,
+        InstitutionSeatCategoryId: option.institutionSeatCatId,
+        PackageLineId: 0,
+        PerformanceId: performanceId
+      }
+    })
+  });
+
+  return parseCartResponse(response);
+}
+
 async function parseJsonResponse(response) {
   const contentType = response.headers.get("content-type") || "";
   const body = await response.text();
@@ -53,6 +86,28 @@ async function parseJsonResponse(response) {
 
   const parsed = JSON.parse(body);
   return Array.isArray(parsed) ? parsed : parsed.data || [];
+}
+
+async function parseCartResponse(response) {
+  const contentType = response.headers.get("content-type") || "";
+  const body = await response.text();
+
+  if (!contentType.includes("application/json")) {
+    throw new Error(`Expected JSON from FIFA cart API, got ${contentType || "unknown content type"}`);
+  }
+
+  const parsed = JSON.parse(body);
+
+  if (!response.ok || parsed?.Code) {
+    const message = parsed?.Message || parsed?.error || body.slice(0, 300);
+    throw new Error(`FIFA cart API returned ${response.status}: ${message}`);
+  }
+
+  if (!parsed?.CheckoutRedirectUrl) {
+    throw new Error("FIFA cart API did not return CheckoutRedirectUrl");
+  }
+
+  return parsed;
 }
 
 export function normalizeMatchNumber(value) {
@@ -108,7 +163,12 @@ export function getHospitalityOptions(lounges, { section, sectionCode, allSectio
         availableQuantity: Number(section.AvailableQuantity || 0),
         seatCategoryId: section.SeatCategoryId,
         audSubCategoryId: section.AudienceSubCategoryId,
-        institutionSeatCatId: section.InstitutionSeatCategoryId
+        institutionSeatCatId: section.InstitutionSeatCategoryId,
+        canCreateCart: Boolean(
+          section.SeatCategoryId &&
+          section.AudienceSubCategoryId &&
+          section.InstitutionSeatCategoryId
+        )
       }))
     )
     .filter((option) => {
@@ -149,6 +209,7 @@ export function summarizeMatch(match, { hospitalityOptions } = {}) {
     selectedSection: minOption?.sectionName || minOption?.loungeName || cheapestSelectedOption?.sectionName || cheapestSelectedOption?.loungeName || null,
     selectedSectionCode: minOption?.sectionCode || cheapestSelectedOption?.sectionCode || null,
     availableQuantity: minOption?.availableQuantity ?? null,
+    cartOption: minOption?.canCreateCart ? minOption : null,
     availableOptions,
     selectedOptions
   };
