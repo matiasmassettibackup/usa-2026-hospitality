@@ -1682,8 +1682,19 @@ async function handleTelegramCommands() {
   await writeSubscriptionsState(subscriptionsState);
 }
 
+function installShutdownHandlers() {
+  const shutdown = (signal) => {
+    console.log(`[${new Date().toISOString()}] Received ${signal}; exiting cleanly`);
+    process.exit(0);
+  };
+
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT", () => shutdown("SIGINT"));
+}
+
 async function main() {
   await loadDotEnv();
+  installShutdownHandlers();
 
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
