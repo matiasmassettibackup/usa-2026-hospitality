@@ -83,6 +83,8 @@ TELEGRAM_BOT_TOKEN=123456789:replace_me
 TELEGRAM_CHAT_ID=123456789
 AUTO_CART_ENABLED=false
 BOT_STATE_DIR=.state
+# ADMIN_CART_NOTIFY_CHAT_IDS=123456789
+# ADMIN_CART_NOTIFY_WATCH=8270163449:M86:SEPSTA
 # BOOTSTRAP_SUBSCRIPTIONS_JSON={"chats":{}}
 ```
 
@@ -109,6 +111,15 @@ Si `AUTO_CART_ENABLED=true`, el monitor puede crear el carrito automáticamente 
 - las alertas `all` participan para cualquier sección disponible del partido;
 - los usuarios no ganadores reciben la alerta normal, pero no un carrito prearmado;
 - el link abre el carrito oficial de FIFA, pero el bot no hace checkout ni pago.
+
+Para recibir una confirmación admin cuando un carrito prioritario específico se crea bien, configurá:
+
+```bash
+ADMIN_CART_NOTIFY_CHAT_IDS=959522546
+ADMIN_CART_NOTIFY_WATCH=8270163449:M86:SEPSTA
+```
+
+El formato de `ADMIN_CART_NOTIFY_WATCH` es `<chatId>:<match>:<sectionCode>`. Por defecto queda cubierto Francisco `8270163449`, `M86`, `SEPSTA` (`Suite Essentials`).
 
 El bot también responde `/start` con una bienvenida en español. Si existe `assets/la-banda-argentina.jpg`, la manda como foto junto al mensaje.
 
@@ -236,6 +247,8 @@ TELEGRAM_CHAT_ID=959522546
 ADMIN_CHAT_IDS=959522546
 AUTO_CART_ENABLED=true
 BOT_STATE_DIR=/data/.state
+ADMIN_CART_NOTIFY_CHAT_IDS=959522546
+ADMIN_CART_NOTIFY_WATCH=8270163449:M86:SEPSTA
 BOOTSTRAP_SUBSCRIPTIONS_JSON={...}
 ```
 

@@ -29,6 +29,7 @@ const DEFAULT_SECTION = "Suite Essentials";
 const DEFAULT_MATCHES = "M86,M95,M100";
 const COMMAND_POLL_INTERVAL_SECONDS = 1;
 const CART_EXPIRY_MINUTES = 15;
+const DEFAULT_ADMIN_CART_NOTIFY_WATCH = "8270163449:M86:SEPSTA";
 const START_IMAGE_CANDIDATES = [
   "assets/la-banda-argentina.png",
   "assets/la-banda-argentina.jpg",
@@ -258,6 +259,27 @@ function adminChatIds() {
 
 function isAdminChat(chatId) {
   return adminChatIds().has(String(chatId));
+}
+
+function adminCartNotifyChatIds() {
+  return String(process.env.ADMIN_CART_NOTIFY_CHAT_IDS || process.env.TELEGRAM_CHAT_ID || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function adminCartNotifyWatchSet() {
+  return new Set(
+    String(process.env.ADMIN_CART_NOTIFY_WATCH || DEFAULT_ADMIN_CART_NOTIFY_WATCH)
+      .split(",")
+      .map((value) => value.trim().toUpperCase())
+      .filter(Boolean)
+  );
+}
+
+function shouldNotifyAdminCartAssignment({ chatId, summary, option }) {
+  const key = `${chatId}:${summary.match}:${option.sectionCode}`.toUpperCase();
+  return adminCartNotifyWatchSet().has(key);
 }
 
 function userPriority(chatState = {}) {
@@ -591,6 +613,19 @@ function formatAutoCartMessage({ summary, option, cart }) {
     "",
     `Este link abre el carrito oficial de FIFA y suele expirar en aprox. ${CART_EXPIRY_MINUTES} minutos (${expiresAt.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}).`,
     "No hice checkout ni pago."
+  ].join("\n");
+}
+
+function formatAdminAutoCartNotification({ summary, option, winnerChatId, cart }) {
+  return [
+    "Confirmación carrito prioritario",
+    "",
+    `Usuario: ${winnerChatId}`,
+    `${summary.match} - ${summary.teams}`,
+    `${option.sectionName}: ${formatMoney(option.amount)} x 1`,
+    `Orden FIFA: ${cart.OrderId}`,
+    "",
+    "El link de carrito fue enviado correctamente al usuario prioritario."
   ].join("\n");
 }
 
@@ -1028,6 +1063,21 @@ export async function allocateAutoCarts({ allocationCandidates, nextState }) {
         chatId: winner.chatId,
         replyMarkup: mainMenuKeyboard()
       });
+
+      if (shouldNotifyAdminCartAssignment({ chatId: winner.chatId, summary: winner.summary, option })) {
+        for (const adminChatId of adminCartNotifyChatIds()) {
+          if (String(adminChatId) === String(winner.chatId)) continue;
+          await sendTelegramMessage(formatAdminAutoCartNotification({
+            summary: winner.summary,
+            option,
+            winnerChatId: winner.chatId,
+            cart
+          }), {
+            chatId: adminChatId,
+            replyMarkup: mainMenuKeyboard()
+          });
+        }
+      }
 
       allocations[key] = {
         ...allocations[key],
