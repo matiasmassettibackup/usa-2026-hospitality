@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { selectAutoCartWinners } from "../src/monitor.js";
+import { allocateAutoCarts, selectAutoCartWinners } from "../src/monitor.js";
 
 function candidate({ chatId, priority = 0, firstSeenAt = "2026-01-01T00:00:00.000Z", match = "M86", sectionCode = "FIFA" }) {
   return {
@@ -72,4 +72,14 @@ test("skips sections that already have an active allocation", () => {
   });
 
   assert.deepEqual(winners.map((winner) => winner.key), ["M86:TROPHY"]);
+});
+
+test("allocateAutoCarts reports empty assigned and failed sets when disabled", async () => {
+  const result = await allocateAutoCarts({
+    allocationCandidates: [candidate({ chatId: "100", priority: 1 })],
+    nextState: {}
+  });
+
+  assert.deepEqual([...result.assignedKeys], []);
+  assert.deepEqual([...result.failedAllocationKeys], []);
 });

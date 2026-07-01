@@ -29,7 +29,7 @@ El monitor escucha por defecto:
 
 ## Comandos
 
-Chequeo puntual de M86, M95 y M100, por defecto en todas las categorías:
+Chequeo puntual de M86, M95 y M100, por defecto en la entrada más barata de cada categoría:
 
 ```bash
 npm run check
@@ -51,8 +51,8 @@ Ejemplos directos:
 
 ```bash
 node src/monitor.js --once --match M86
-node src/monitor.js --once --match M86,M95,M100 --all-sections
-node src/monitor.js --match M86 --all-sections --interval 30
+node src/monitor.js --once --match M86,M95,M100 --cheapest-per-category
+node src/monitor.js --match M86 --cheapest-per-category --interval 30
 node src/monitor.js --once --venue NN_DAL
 node src/monitor.js --once --team Argentina
 node src/monitor.js --once --match M100 --all-sections
@@ -60,6 +60,16 @@ node src/monitor.js --once --match M86 --section "VIP Lounge"
 ```
 
 El monitor guarda estado en `.state/hospitality-monitor.json` para detectar el cambio `unavailable -> available` por sección y emitir `ALERT:`.
+
+El default operativo para `M86`, `M95` y `M100` es `--cheapest-per-category`: revisa sólo la entrada más barata dentro de cada categoría/lounge de hospitalidad, en lugar de avisar por todas las secciones disponibles. Además, `M86` incluye una alerta explícita para `Suite Essentials` por si FIFA la publica como categoría separada. Si querés volver a escuchar absolutamente todo, usá `--all-sections` o `/seguir M86 all`.
+
+Además, el bot mantiene un CSV compacto de eventos de disponibilidad para `M86`, `M95`, `M100`, `M102` y `M104`:
+
+```text
+/Users/matiasmassetti/.fifa-hospitality-monitor/.state/availability-events.csv
+```
+
+Ese archivo agrega una fila sólo cuando una sección concreta pasa de no disponible a disponible. Mientras siga disponible no repite filas en cada poll; si desaparece y vuelve a aparecer, registra un nuevo evento. Incluye partido, equipos, estadio, sección/lounge, precio, cantidad disponible y si esa opción sirve para crear carrito.
 
 ## Telegram
 
@@ -86,7 +96,7 @@ Para probar el envío:
 npm run telegram:test
 ```
 
-Cuando `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` están configurados, `npm run watch` manda Telegram automáticamente sólo cuando detecta que la sección monitoreada pasa a disponible.
+Cuando `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` están configurados, `npm run watch` manda Telegram automáticamente sólo cuando detecta que la sección monitoreada pasa a disponible. Por defecto, los botones principales agregan `M86`, `M95` y `M100` como `barata`, que significa la entrada más barata de cada categoría/lounge.
 
 Las alertas incluyen la sección exacta y cantidad disponible si FIFA la informa. El botón `Crear carrito` vuelve a validar disponibilidad y, si la sección sigue disponible, crea una orden en FIFA y responde con el link oficial de carrito. El botón `Abrir FIFA manual` queda como fallback.
 

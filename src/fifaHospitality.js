@@ -147,32 +147,42 @@ export function getAvailableOptions(match) {
     .sort((a, b) => a.amount - b.amount);
 }
 
-export function getHospitalityOptions(lounges, { section, sectionCode, allSections = false } = {}) {
+export function getHospitalityOptions(lounges, { section, sectionCode, allSections = false, cheapestPerCategory = false } = {}) {
   const targetSection = section?.trim().toLowerCase();
   const targetCode = sectionCode?.trim().toUpperCase();
 
   return (lounges || [])
-    .flatMap((lounge) =>
-      (lounge.seatingSections || []).map((section) => ({
-        loungeId: lounge.id,
-        loungeTitle: lounge.title,
-        sectionCode: section.Code,
-        sectionName: section.Name,
-        amount: Number(section.StartingPrice),
-        isAvailable: section.IsAvailable === true && Number(section.AvailableQuantity || 0) > 0,
-        availableQuantity: Number(section.AvailableQuantity || 0),
-        seatCategoryId: section.SeatCategoryId,
-        audSubCategoryId: section.AudienceSubCategoryId,
-        institutionSeatCatId: section.InstitutionSeatCategoryId,
-        canCreateCart: Boolean(
-          section.SeatCategoryId &&
-          section.AudienceSubCategoryId &&
-          section.InstitutionSeatCategoryId
-        )
-      }))
-    )
+    .flatMap((lounge) => {
+      const options = (lounge.seatingSections || [])
+        .map((section) => ({
+          loungeId: lounge.id,
+          loungeTitle: lounge.title,
+          sectionCode: section.Code,
+          sectionName: section.Name,
+          amount: Number(section.StartingPrice),
+          isAvailable: section.IsAvailable === true && Number(section.AvailableQuantity || 0) > 0,
+          availableQuantity: Number(section.AvailableQuantity || 0),
+          seatCategoryId: section.SeatCategoryId,
+          audSubCategoryId: section.AudienceSubCategoryId,
+          institutionSeatCatId: section.InstitutionSeatCategoryId,
+          canCreateCart: Boolean(
+            section.SeatCategoryId &&
+            section.AudienceSubCategoryId &&
+            section.InstitutionSeatCategoryId
+          )
+        }))
+        .filter((option) => {
+          if (allSections || cheapestPerCategory) return true;
+          if (targetCode) return option.sectionCode?.toUpperCase() === targetCode;
+          if (targetSection) return option.sectionName?.toLowerCase().includes(targetSection);
+          return true;
+        })
+        .sort((a, b) => a.amount - b.amount);
+
+      return cheapestPerCategory ? options.slice(0, 1) : options;
+    })
     .filter((option) => {
-      if (allSections) return true;
+      if (allSections || cheapestPerCategory) return true;
       if (targetCode) return option.sectionCode?.toUpperCase() === targetCode;
       if (targetSection) return option.sectionName?.toLowerCase().includes(targetSection);
       return true;

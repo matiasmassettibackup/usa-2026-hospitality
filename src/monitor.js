@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { loadDotEnv } from "./config.js";
 import {
@@ -22,6 +22,9 @@ const DEFAULT_STATE_FILE = ".state/hospitality-monitor.json";
 const TELEGRAM_BOT_STATE_FILE = ".state/telegram-bot.json";
 const SUBSCRIPTIONS_FILE = ".state/subscriptions.json";
 const CART_ALLOCATIONS_KEY = "__cartAllocations";
+const AVAILABILITY_EVENTS_KEY = "__availabilityEvents";
+const AVAILABILITY_EVENTS_FILE = ".state/availability-events.csv";
+const AVAILABILITY_LOG_MATCHES = ["M86", "M95", "M100", "M102", "M104"];
 const DEFAULT_SECTION = "Suite Essentials";
 const DEFAULT_MATCHES = "M86,M95,M100";
 const COMMAND_POLL_INTERVAL_SECONDS = 1;
@@ -34,9 +37,10 @@ const START_IMAGE_CANDIDATES = [
 ];
 
 const DEFAULT_SUBSCRIPTIONS = [
-  { match: "M86", allSections: true },
-  { match: "M95", allSections: true },
-  { match: "M100", allSections: true }
+  { match: "M86", cheapestPerCategory: true },
+  { match: "M86", section: "Suite Essentials" },
+  { match: "M95", cheapestPerCategory: true },
+  { match: "M100", cheapestPerCategory: true }
 ];
 
 const SECTION_ALIASES = new Map([
@@ -44,6 +48,12 @@ const SECTION_ALIASES = new Map([
   ["todo", { allSections: true }],
   ["todos", { allSections: true }],
   ["any", { allSections: true }],
+  ["cheap", { cheapestPerCategory: true }],
+  ["cheapest", { cheapestPerCategory: true }],
+  ["barata", { cheapestPerCategory: true }],
+  ["baratas", { cheapestPerCategory: true }],
+  ["mas barata", { cheapestPerCategory: true }],
+  ["más barata", { cheapestPerCategory: true }],
   ["suite", { section: "Suite Essentials" }],
   ["suite essentials", { section: "Suite Essentials" }],
   ["essentials", { section: "Suite Essentials" }],
@@ -71,6 +81,7 @@ function parseArgs(argv) {
     section: DEFAULT_SECTION,
     sectionCode: undefined,
     allSections: false,
+    cheapestPerCategory: false,
     stateFile: DEFAULT_STATE_FILE
   };
 
@@ -85,6 +96,7 @@ function parseArgs(argv) {
     else if (arg === "--section") options.section = next, index += 1;
     else if (arg === "--section-code") options.sectionCode = next, index += 1;
     else if (arg === "--all-sections") options.allSections = true;
+    else if (arg === "--cheapest-per-category") options.cheapestPerCategory = true;
     else if (arg === "--interval") options.interval = Number(next), index += 1;
     else if (arg === "--state") options.stateFile = next, index += 1;
     else if (arg === "--help") options.help = true;
@@ -105,8 +117,8 @@ function parseArgs(argv) {
 function printHelp() {
   console.log(`Usage:
   node src/monitor.js --once --match M86
-  node src/monitor.js --once --match M86,M95,M100 --all-sections
-  node src/monitor.js --match M86 --all-sections --interval 60
+  node src/monitor.js --once --match M86,M95,M100 --cheapest-per-category
+  node src/monitor.js --match M86 --cheapest-per-category --interval 60
   node src/monitor.js --once --venue NN_DAL
   node src/monitor.js --once --team Argentina
   node src/monitor.js --once --match M100 --all-sections
@@ -118,6 +130,7 @@ Options:
   --section "Suite Essentials" Seating section to watch. Defaults to Suite Essentials.
   --section-code MEL           Seating section code to watch.
   --all-sections               Watch any hospitality section instead of Suite Essentials.
+  --cheapest-per-category      Watch only the cheapest ticket in each hospitality category.
   --interval 60                Polling interval in seconds. Defaults to 60.
   --once                       Run one check and exit.
   --state PATH                 State file used to detect unavailable -> available changes.
@@ -170,6 +183,32 @@ function formatMoney(amount) {
     currency: "USD",
     maximumFractionDigits: 0
   }).format(amount);
+}
+
+function csvCell(value) {
+  if (value == null) return "";
+  const text = String(value);
+  if (!/[",\n\r]/.test(text)) return text;
+  return `"${text.replaceAll("\"", "\"\"")}"`;
+}
+
+async function appendCsvRows(path, headers, rows) {
+  if (!rows.length) return;
+
+  let needsHeader = false;
+  try {
+    await access(path);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    needsHeader = true;
+  }
+
+  await mkdir(dirname(path), { recursive: true });
+  const lines = [
+    ...(needsHeader ? [headers.join(",")] : []),
+    ...rows.map((row) => headers.map((header) => csvCell(row[header])).join(","))
+  ];
+  await appendFile(path, `${lines.join("\n")}\n`);
 }
 
 function normalizeMatchInput(value) {
@@ -237,14 +276,18 @@ function setUserPriority(subscriptionsState, chatId, priority) {
 }
 
 function subscriptionKey(subscription) {
-  const scope = subscription.allSections
+  const scope = subscription.cheapestPerCategory
+    ? "cheapest"
+    : subscription.allSections
     ? "all"
     : subscription.sectionCode || subscription.section || DEFAULT_SECTION;
   return `${subscription.match}:${scope}`;
 }
 
 function formatSubscription(subscription) {
-  const scope = subscription.allSections
+  const scope = subscription.cheapestPerCategory
+    ? "mas barata por categoria"
+    : subscription.allSections
     ? "todas las categorías"
     : subscription.section || subscription.sectionCode || DEFAULT_SECTION;
   return `${subscription.match} - ${scope}`;
@@ -269,7 +312,7 @@ function normalizeSubscriptionState(state) {
 function getChatSubscriptions(subscriptionsState, chatId) {
   const key = String(chatId);
   const chatState = subscriptionsState.chats?.[key];
-  if (chatState?.subscriptions?.length) return chatState.subscriptions;
+  if (Array.isArray(chatState?.subscriptions)) return chatState.subscriptions;
   return DEFAULT_SUBSCRIPTIONS;
 }
 
@@ -347,15 +390,15 @@ function mainMenuKeyboard() {
         { text: "Precios M100", callback_data: "precios:M100" }
       ],
       [
-        { text: "Seguir M86 todas", callback_data: "seguir:M86:all" },
-        { text: "Seguir M95 todas", callback_data: "seguir:M95:all" }
+        { text: "Seguir M86 baratas", callback_data: "seguir:M86:cheap" },
+        { text: "Seguir M95 baratas", callback_data: "seguir:M95:cheap" }
       ],
       [
-        { text: "Seguir M100 todas", callback_data: "seguir:M100:all" }
+        { text: "Seguir M100 baratas", callback_data: "seguir:M100:cheap" }
       ],
       [
         { text: "Otro partido Suite", callback_data: "otro:suite" },
-        { text: "Otro partido todas", callback_data: "otro:all" }
+        { text: "Otro partido baratas", callback_data: "otro:cheap" }
       ],
       [
         { text: "Precios otro partido", callback_data: "precios_otro" }
@@ -531,7 +574,7 @@ function baseWelcomeLines() {
     "Hola! Soy el bot de Hospitality 2026.",
     "Creado por Matias Massetti.",
     "",
-    "Por defecto ya estoy mirando M86, M95 y M100 en todas las categorías de hospitality.",
+    "Por defecto ya estoy mirando M86, M95 y M100 en la entrada más barata de cada categoría de hospitality, más M86 Suite Essentials explícito.",
     "Si aparece disponibilidad en cualquiera de esos partidos, te aviso y preparo carrito automático según prioridad si está activado.",
     "",
     "Si aparece disponibilidad, te mando una alerta con partido, sede, precio y link.",
@@ -567,6 +610,13 @@ function formatLoungePriceLine(lounge) {
 }
 
 function formatSubscriptionsBlock(subscriptions) {
+  if (!subscriptions.length) {
+    return [
+      "Tus alertas:",
+      "- ninguna"
+    ];
+  }
+
   return [
     "Tus alertas:",
     ...subscriptions.map((subscription) => `- ${formatSubscription(subscription)}`)
@@ -677,7 +727,9 @@ async function buildStatusMessage(chatId, subscriptionsState) {
 }
 
 function stateKey(summary, options) {
-  const scope = options.allSections
+  const scope = options.cheapestPerCategory
+    ? "cheapest"
+    : options.allSections
     ? "all-sections"
     : options.sectionCode || options.section || "selected-section";
   return `${summary.match}:${scope}`;
@@ -700,7 +752,8 @@ async function checkOnce(options) {
     const hospitalityOptions = getHospitalityOptions(lounges, {
       section: options.section,
       sectionCode: options.sectionCode,
-      allSections: options.allSections
+      allSections: options.allSections,
+      cheapestPerCategory: options.cheapestPerCategory
     });
 
     return summarizeMatch(match, { hospitalityOptions });
@@ -764,10 +817,119 @@ async function summarizeSubscription(match, subscription) {
   const hospitalityOptions = getHospitalityOptions(lounges, {
     section: subscription.section,
     sectionCode: subscription.sectionCode,
-    allSections: subscription.allSections
+    allSections: subscription.allSections,
+    cheapestPerCategory: subscription.cheapestPerCategory
   });
 
   return summarizeMatch(match, { hospitalityOptions });
+}
+
+function availabilityEventKey(summary, option) {
+  return `${summary.match}:${option.sectionCode || option.sectionName || option.loungeTitle || "unknown"}`;
+}
+
+export function collectAvailabilityEventsForSummary(summary, previousEvents = {}, timestamp = new Date().toISOString()) {
+  const events = [];
+  const activeKeys = new Set();
+  const nextEvents = {};
+
+  for (const option of summary.availableOptions || []) {
+    const key = availabilityEventKey(summary, option);
+    activeKeys.add(key);
+
+    if (!previousEvents[key]?.active) {
+      events.push({
+        timestamp,
+        match: summary.match,
+        teams: summary.teams,
+        venue: summary.venue,
+        city: summary.city,
+        date: summary.dayTime || summary.date,
+        sectionCode: option.sectionCode,
+        sectionName: option.sectionName,
+        loungeTitle: option.loungeTitle || option.loungeName,
+        priceUsd: option.amount,
+        availableQuantity: option.availableQuantity,
+        canCreateCart: option.canCreateCart === false ? "false" : "true"
+      });
+    }
+
+    nextEvents[key] = {
+      active: true,
+      match: summary.match,
+      sectionCode: option.sectionCode,
+      sectionName: option.sectionName,
+      loungeTitle: option.loungeTitle || option.loungeName,
+      priceUsd: option.amount,
+      availableQuantity: option.availableQuantity,
+      firstSeenAt: previousEvents[key]?.firstSeenAt || timestamp,
+      lastSeenAt: timestamp,
+      lastEventAt: previousEvents[key]?.active ? previousEvents[key]?.lastEventAt : timestamp
+    };
+  }
+
+  return { events, activeKeys, nextEvents };
+}
+
+async function recordAvailabilityEvents(matches, nextState) {
+  const previousEvents = nextState[AVAILABILITY_EVENTS_KEY] || {};
+  const nextEvents = {};
+  const rows = [];
+  const activeKeys = new Set();
+  const timestamp = new Date().toISOString();
+  const targetMatches = filterMatches(matches, { match: AVAILABILITY_LOG_MATCHES.join(",") });
+
+  for (const match of targetMatches) {
+    try {
+      const lounges = await fetchSingleMatchLounges(match.PerformanceId);
+      const summary = summarizeMatch(match, {
+        hospitalityOptions: getHospitalityOptions(lounges, { allSections: true })
+      });
+      const collected = collectAvailabilityEventsForSummary(summary, previousEvents, timestamp);
+
+      rows.push(...collected.events);
+      for (const key of collected.activeKeys) activeKeys.add(key);
+      Object.assign(nextEvents, collected.nextEvents);
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] Availability CSV failed for M${match.MatchNumber}: ${error.message}`);
+    }
+  }
+
+  for (const [key, previous] of Object.entries(previousEvents)) {
+    if (activeKeys.has(key)) continue;
+    if (!AVAILABILITY_LOG_MATCHES.some((match) => key.startsWith(`${match}:`))) {
+      nextEvents[key] = previous;
+      continue;
+    }
+    nextEvents[key] = {
+      ...previous,
+      active: false,
+      lastMissingAt: timestamp
+    };
+  }
+
+  nextState[AVAILABILITY_EVENTS_KEY] = nextEvents;
+
+  await appendCsvRows(AVAILABILITY_EVENTS_FILE, [
+    "timestamp",
+    "match",
+    "teams",
+    "venue",
+    "city",
+    "date",
+    "sectionCode",
+    "sectionName",
+    "loungeTitle",
+    "priceUsd",
+    "availableQuantity",
+    "canCreateCart"
+  ], rows);
+
+  if (rows.length) {
+    console.log(`[${timestamp}] Logged ${rows.length} availability event(s) to ${AVAILABILITY_EVENTS_FILE}`);
+  }
+
+  return rows;
 }
 
 export function selectAutoCartWinners(allocationCandidates, allocations = {}) {
@@ -797,9 +959,12 @@ export function selectAutoCartWinners(allocationCandidates, allocations = {}) {
   });
 }
 
-async function allocateAutoCarts({ allocationCandidates, nextState }) {
+export async function allocateAutoCarts({ allocationCandidates, nextState }) {
   const assignedKeys = new Set();
-  if (!autoCartEnabled() || !telegramIsConfigured() || !allocationCandidates.length) return assignedKeys;
+  const failedAllocationKeys = new Set();
+  if (!autoCartEnabled() || !telegramIsConfigured() || !allocationCandidates.length) {
+    return { assignedKeys, failedAllocationKeys };
+  }
 
   const allocations = { ...(nextState[CART_ALLOCATIONS_KEY] || {}) };
 
@@ -865,12 +1030,13 @@ async function allocateAutoCarts({ allocationCandidates, nextState }) {
         orderId: allocations[key].orderId || cart?.OrderId,
         error: error.message
       };
+      failedAllocationKeys.add(key);
       console.error(`[${new Date().toISOString()}] Auto cart failed for ${key}: ${error.message}`);
     }
   }
 
   nextState[CART_ALLOCATIONS_KEY] = allocations;
-  return assignedKeys;
+  return { assignedKeys, failedAllocationKeys };
 }
 
 async function checkSubscriptions() {
@@ -888,7 +1054,7 @@ async function checkSubscriptions() {
   let checkedCount = 0;
 
   for (const [chatId, chatState] of chatEntries) {
-    const subscriptions = chatState.subscriptions?.length ? chatState.subscriptions : DEFAULT_SUBSCRIPTIONS;
+    const subscriptions = Array.isArray(chatState.subscriptions) ? chatState.subscriptions : DEFAULT_SUBSCRIPTIONS;
 
     for (const subscription of subscriptions) {
       const matchNumber = normalizeMatchInput(subscription.match);
@@ -947,7 +1113,12 @@ async function checkSubscriptions() {
   }
   nextState[CART_ALLOCATIONS_KEY] = allocations;
 
-  const autoAssignedKeys = await allocateAutoCarts({ allocationCandidates, nextState });
+  await recordAvailabilityEvents(matches, nextState);
+
+  const { assignedKeys: autoAssignedKeys, failedAllocationKeys } = await allocateAutoCarts({
+    allocationCandidates,
+    nextState
+  });
 
   if (telegramIsConfigured()) {
     for (const candidate of manualAlertCandidates) {
@@ -955,6 +1126,7 @@ async function checkSubscriptions() {
         ? cartAllocationKey(candidate.summary)
         : null;
       const autoAssignedKey = allocationKey ? `${candidate.chatId}:${allocationKey}` : null;
+      if (allocationKey && failedAllocationKeys.has(allocationKey)) continue;
       if (autoAssignedKey && autoAssignedKeys.has(autoAssignedKey)) continue;
 
       await sendTelegramMessage(formatTelegramAlertForSubscription(candidate.summary, candidate.subscription), {
@@ -1037,8 +1209,9 @@ function helpMessage() {
     "También podés usar los botones de abajo para configurar tus alertas.",
     "",
     "/seguir M86 all",
-    "/seguir M95 all",
-    "/seguir M100 all",
+    "/seguir M86 barata",
+    "/seguir M95 barata",
+    "/seguir M100 barata",
     "/seguir M86 VIP",
     "/precios M86",
     "/prioridades",
@@ -1050,8 +1223,8 @@ function helpMessage() {
     "/reiniciar",
     "/start",
     "",
-    "Categorías útiles: Suite Essentials, VIP, Pitchside, Trophy, Champions, FIFA Pavilion, all.",
-    "Podés usar cualquier partido del M1 al M104. Ejemplo: /seguir M75 all.",
+    "Categorías útiles: barata, Suite Essentials, VIP, Pitchside, Trophy, Champions, FIFA Pavilion, all.",
+    "Podés usar cualquier partido del M1 al M104. Ejemplo: /seguir M75 barata.",
     "",
     "Este bot no es oficial de FIFA. Puede crear un link de carrito cuando tocás el botón, o automáticamente si AUTO_CART_ENABLED=true, pero no hace checkout ni compra entradas.",
     "",
@@ -1134,7 +1307,7 @@ async function handleTelegramCommands() {
 
       if (data === "reiniciar") {
         setChatSubscriptions(subscriptionsState, chatId, DEFAULT_SUBSCRIPTIONS);
-        await sendTelegramMessage("Listo. Volví a M86, M95 y M100 en todas las categorías.", {
+        await sendTelegramMessage("Listo. Volví a M86, M95 y M100 con la entrada más barata de cada categoría, más M86 Suite Essentials explícito.", {
           chatId,
           replyMarkup: mainMenuKeyboard()
         });
@@ -1204,7 +1377,9 @@ async function handleTelegramCommands() {
           sectionInput
         });
         const section = normalizeSectionInput(sectionInput);
-        const scope = section.allSections ? "todas las categorías" : section.section || DEFAULT_SECTION;
+        const scope = section.cheapestPerCategory
+          ? "la entrada más barata de cada categoría"
+          : section.allSections ? "todas las categorías" : section.section || DEFAULT_SECTION;
         await sendTelegramMessage(`Mandame el número de partido para seguir ${scope}. Ejemplo: M75`, { chatId });
         continue;
       }
@@ -1265,7 +1440,8 @@ async function handleTelegramCommands() {
 
     if (command === "/start") {
       await safelySendChatAction(chatId);
-      if (!subscriptionsState.chats?.[String(chatId)]?.subscriptions?.length) {
+      const currentChatState = subscriptionsState.chats?.[String(chatId)];
+      if (!currentChatState || !Array.isArray(currentChatState.subscriptions)) {
         setChatSubscriptions(subscriptionsState, chatId, DEFAULT_SUBSCRIPTIONS);
       }
       startChats.add(chatId);
@@ -1334,7 +1510,7 @@ async function handleTelegramCommands() {
     if (command === "/watch" || command === "/seguir") {
       const subscription = parseWatchCommand(text);
       if (!subscription || !isValidMatchNumber(subscription.match)) {
-        await sendTelegramMessage("Uso: /seguir M86 all, /seguir M95 all o /seguir M100 all", { chatId });
+        await sendTelegramMessage("Uso: /seguir M86 barata, /seguir M95 all o /seguir M100 VIP", { chatId });
         continue;
       }
 
@@ -1374,7 +1550,7 @@ async function handleTelegramCommands() {
 
     if (command === "/reset" || command === "/reiniciar") {
       setChatSubscriptions(subscriptionsState, chatId, DEFAULT_SUBSCRIPTIONS);
-      await sendTelegramMessage("Listo. Volví a M86, M95 y M100 en todas las categorías.", {
+      await sendTelegramMessage("Listo. Volví a M86, M95 y M100 con la entrada más barata de cada categoría, más M86 Suite Essentials explícito.", {
         chatId,
         replyMarkup: mainMenuKeyboard()
       });

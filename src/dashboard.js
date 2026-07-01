@@ -11,9 +11,10 @@ const port = Number(process.env.PORT || process.env.DASHBOARD_PORT || DEFAULT_PO
 const stateDir = process.env.DASHBOARD_STATE_DIR
   || (existsSync(RUNTIME_STATE_DIR) ? RUNTIME_STATE_DIR : LOCAL_STATE_DIR);
 const DEFAULT_SUBSCRIPTIONS = [
-  { match: "M86", allSections: true },
-  { match: "M95", allSections: true },
-  { match: "M100", allSections: true }
+  { match: "M86", cheapestPerCategory: true },
+  { match: "M86", section: "Suite Essentials" },
+  { match: "M95", cheapestPerCategory: true },
+  { match: "M100", cheapestPerCategory: true }
 ];
 
 async function readJson(path, fallback) {
@@ -26,11 +27,13 @@ async function readJson(path, fallback) {
 }
 
 function subscriptionScope(subscription) {
+  if (subscription.cheapestPerCategory) return "cheapest";
   if (subscription.allSections) return "all";
   return subscription.sectionCode || subscription.section || "Suite Essentials";
 }
 
 function subscriptionLabel(subscription) {
+  if (subscription.cheapestPerCategory) return "mas barata por categoria";
   if (subscription.allSections) return "todas las categorias";
   return subscription.section || subscription.sectionCode || "Suite Essentials";
 }
@@ -78,7 +81,7 @@ async function buildDashboardData() {
   const chats = Object.entries(subscriptionsState.chats || {});
   const users = chats.map(([chatId, chatState]) => {
     const user = chatState.user || usersState.chats?.[chatId]?.user || {};
-    const subscriptions = chatState.subscriptions?.length
+    const subscriptions = Array.isArray(chatState.subscriptions)
       ? chatState.subscriptions
       : DEFAULT_SUBSCRIPTIONS;
     const alerts = subscriptions.map((subscription) => {
