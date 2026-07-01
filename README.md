@@ -82,6 +82,8 @@ Ese archivo agrega una fila sólo cuando una sección concreta pasa de no dispon
 TELEGRAM_BOT_TOKEN=123456789:replace_me
 TELEGRAM_CHAT_ID=123456789
 AUTO_CART_ENABLED=false
+BOT_STATE_DIR=.state
+# BOOTSTRAP_SUBSCRIPTIONS_JSON={"chats":{}}
 ```
 
 Para obtener tu `TELEGRAM_CHAT_ID` después de mandarle un mensaje al bot:
@@ -133,6 +135,8 @@ Las preferencias se guardan localmente por chat en:
 ```text
 /Users/matiasmassetti/.fifa-hospitality-monitor/.state/subscriptions.json
 ```
+
+Si `BOT_STATE_DIR` está configurado, el bot guarda todo el estado ahí. Para Railway conviene usar `BOT_STATE_DIR=/data/.state` y montar un volumen persistente en `/data`.
 
 ## Carrito FIFA
 
@@ -215,3 +219,38 @@ Los logs quedan en:
 ```
 
 Importante: si la Mac se duerme, el monitor se pausa. Para algo realmente 24/7, dejá activada una configuración de energía que evite el sleep automático.
+
+## Railway
+
+Railway puede correr este repo como worker 24/7 usando `npm run watch`. El repo incluye `railway.json` y `npm start` apuntando al monitor.
+
+Setup recomendado:
+
+1. Crear un proyecto en Railway desde el repo de GitHub.
+2. Agregar un volumen persistente montado en `/data`.
+3. Configurar variables:
+
+```bash
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=959522546
+ADMIN_CHAT_IDS=959522546
+AUTO_CART_ENABLED=true
+BOT_STATE_DIR=/data/.state
+BOOTSTRAP_SUBSCRIPTIONS_JSON={...}
+```
+
+4. En Settings/Deploy, confirmar que el start command sea `npm run watch`.
+5. Para conservar usuarios/prioridades actuales, usar una de estas opciones:
+
+```text
+/Users/matiasmassetti/.fifa-hospitality-monitor/.state/subscriptions.json -> /data/.state/subscriptions.json
+/Users/matiasmassetti/.fifa-hospitality-monitor/.state/hospitality-monitor.json -> /data/.state/hospitality-monitor.json
+```
+
+O pegar el contenido minificado de `subscriptions.json` en `BOOTSTRAP_SUBSCRIPTIONS_JSON`. El bot sólo lo usa si todavía no existe `/data/.state/subscriptions.json`.
+
+Cuando Railway quede activo, frená el servicio local para evitar doble polling y mensajes duplicados:
+
+```bash
+npm run service:stop
+```

@@ -9,6 +9,8 @@ const LOCAL_STATE_DIR = resolve(".state");
 
 const port = Number(process.env.PORT || process.env.DASHBOARD_PORT || DEFAULT_PORT);
 const stateDir = process.env.DASHBOARD_STATE_DIR
+  || process.env.BOT_STATE_DIR
+  || process.env.STATE_DIR
   || (existsSync(RUNTIME_STATE_DIR) ? RUNTIME_STATE_DIR : LOCAL_STATE_DIR);
 const DEFAULT_SUBSCRIPTIONS = [
   { match: "M86", cheapestPerCategory: true },

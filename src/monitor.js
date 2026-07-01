@@ -1,5 +1,5 @@
 import { access, appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { loadDotEnv } from "./config.js";
 import {
   createSingleMatchCart,
@@ -42,6 +42,16 @@ const DEFAULT_SUBSCRIPTIONS = [
   { match: "M95", cheapestPerCategory: true },
   { match: "M100", cheapestPerCategory: true }
 ];
+
+function stateDir() {
+  return process.env.BOT_STATE_DIR || process.env.STATE_DIR || ".state";
+}
+
+function statePath(path) {
+  if (isAbsolute(path)) return path;
+  if (path.startsWith(".state/")) return join(stateDir(), path.slice(".state/".length));
+  return path;
+}
 
 const SECTION_ALIASES = new Map([
   ["all", { allSections: true }],
@@ -139,16 +149,22 @@ Options:
 
 async function readState(path) {
   try {
-    return JSON.parse(await readFile(path, "utf8"));
+    return JSON.parse(await readFile(statePath(path), "utf8"));
   } catch (error) {
-    if (error.code === "ENOENT") return {};
+    if (error.code === "ENOENT") {
+      if (path === SUBSCRIPTIONS_FILE && process.env.BOOTSTRAP_SUBSCRIPTIONS_JSON) {
+        return JSON.parse(process.env.BOOTSTRAP_SUBSCRIPTIONS_JSON);
+      }
+      return {};
+    }
     throw error;
   }
 }
 
 async function writeState(path, state) {
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify(state, null, 2)}\n`);
+  const targetPath = statePath(path);
+  await mkdir(dirname(targetPath), { recursive: true });
+  await writeFile(targetPath, `${JSON.stringify(state, null, 2)}\n`);
 }
 
 async function writeSubscriptionsState(nextState) {
@@ -194,21 +210,22 @@ function csvCell(value) {
 
 async function appendCsvRows(path, headers, rows) {
   if (!rows.length) return;
+  const targetPath = statePath(path);
 
   let needsHeader = false;
   try {
-    await access(path);
+    await access(targetPath);
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
     needsHeader = true;
   }
 
-  await mkdir(dirname(path), { recursive: true });
+  await mkdir(dirname(targetPath), { recursive: true });
   const lines = [
     ...(needsHeader ? [headers.join(",")] : []),
     ...rows.map((row) => headers.map((header) => csvCell(row[header])).join(","))
   ];
-  await appendFile(path, `${lines.join("\n")}\n`);
+  await appendFile(targetPath, `${lines.join("\n")}\n`);
 }
 
 function normalizeMatchInput(value) {
