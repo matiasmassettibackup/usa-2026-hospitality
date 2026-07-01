@@ -552,12 +552,11 @@ function formatTelegramAlert(summary) {
   ].join("\n");
 }
 
-function formatTelegramAlertForSubscription(summary, subscription) {
+function formatTelegramAlertForSubscription(summary, subscription, { autoCartAssignedToAnotherUser = false } = {}) {
   const price = formatMoney(summary.minAvailablePrice ?? summary.cheapestSelectedPrice);
   const section = summary.selectedSection || summary.cheapestLounge || subscription.section || "Hospitality";
   const quantity = summary.availableQuantity ? ` (${summary.availableQuantity} disp.)` : "";
-
-  return [
+  const lines = [
     "Alerta FIFA Hospitality",
     "",
     `${summary.match} - ${summary.teams}`,
@@ -566,7 +565,16 @@ function formatTelegramAlertForSubscription(summary, subscription) {
     `${summary.date} ${summary.dayTime}`,
     "",
     "Tocá Crear carrito para generar el link oficial de FIFA. No compra ni hace checkout."
-  ].join("\n");
+  ];
+
+  if (autoCartAssignedToAnotherUser) {
+    lines.push(
+      "",
+      "Nota: el carrito automático fue asignado a otro usuario con mayor prioridad. Cualquier cosa, comunicate con Matías."
+    );
+  }
+
+  return lines.join("\n");
 }
 
 function formatAutoCartMessage({ summary, option, cart }) {
@@ -1146,7 +1154,9 @@ async function checkSubscriptions() {
       if (allocationKey && failedAllocationKeys.has(allocationKey)) continue;
       if (autoAssignedKey && autoAssignedKeys.has(autoAssignedKey)) continue;
 
-      await sendTelegramMessage(formatTelegramAlertForSubscription(candidate.summary, candidate.subscription), {
+      await sendTelegramMessage(formatTelegramAlertForSubscription(candidate.summary, candidate.subscription, {
+        autoCartAssignedToAnotherUser: autoCartEnabled() && Boolean(allocationKey)
+      }), {
         chatId: candidate.chatId,
         replyMarkup: matchUrlKeyboard(candidate.summary)
       });
