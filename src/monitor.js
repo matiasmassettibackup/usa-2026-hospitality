@@ -43,6 +43,9 @@ const DEFAULT_SUBSCRIPTIONS = [
   { match: "M95", cheapestPerCategory: true },
   { match: "M100", cheapestPerCategory: true }
 ];
+const RESET_SUBSCRIPTIONS = [
+  { match: "M86", section: "Suite Essentials" }
+];
 
 function stateDir() {
   return process.env.BOT_STATE_DIR || process.env.STATE_DIR || ".state";
@@ -1435,8 +1438,8 @@ async function handleTelegramCommands() {
       }
 
       if (data === "reiniciar") {
-        setChatSubscriptions(subscriptionsState, chatId, DEFAULT_SUBSCRIPTIONS);
-        await sendTelegramMessage("Listo. Volví a M86, M95 y M100 con la entrada más barata de cada categoría, más M86 Suite Essentials explícito.", {
+        setChatSubscriptions(subscriptionsState, chatId, RESET_SUBSCRIPTIONS);
+        await sendTelegramMessage("Listo. Reinicié tus alertas y dejé sólo M86 Suite Essentials.", {
           chatId,
           replyMarkup: mainMenuKeyboard()
         });
@@ -1678,8 +1681,8 @@ async function handleTelegramCommands() {
     }
 
     if (command === "/reset" || command === "/reiniciar") {
-      setChatSubscriptions(subscriptionsState, chatId, DEFAULT_SUBSCRIPTIONS);
-      await sendTelegramMessage("Listo. Volví a M86, M95 y M100 con la entrada más barata de cada categoría, más M86 Suite Essentials explícito.", {
+      setChatSubscriptions(subscriptionsState, chatId, RESET_SUBSCRIPTIONS);
+      await sendTelegramMessage("Listo. Reinicié tus alertas y dejé sólo M86 Suite Essentials.", {
         chatId,
         replyMarkup: mainMenuKeyboard()
       });

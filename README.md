@@ -143,6 +143,7 @@ Comandos disponibles para usuarios:
 ```
 
 `/prioridad` y `/prioridades` son comandos admin. Por defecto el admin es `TELEGRAM_CHAT_ID`; se puede configurar una lista separada con `ADMIN_CHAT_IDS=123,456`.
+`/reiniciar` y el botón `Reiniciar alertas` dejan al usuario sólo con `M86 - Suite Essentials`.
 
 Las preferencias se guardan localmente por chat en:
 
