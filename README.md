@@ -82,6 +82,7 @@ Ese archivo agrega una fila sólo cuando una sección concreta pasa de no dispon
 TELEGRAM_BOT_TOKEN=123456789:replace_me
 TELEGRAM_CHAT_ID=123456789
 AUTO_CART_ENABLED=false
+# AUTO_CART_MAX_PER_EVENT=1
 BOT_STATE_DIR=.state
 # ADMIN_CART_NOTIFY_CHAT_IDS=123456789
 # ADMIN_CART_NOTIFY_WATCH=8270163449:M86:SEPSTA
@@ -106,10 +107,12 @@ Las alertas incluyen la sección exacta y cantidad disponible si FIFA la informa
 
 Si `AUTO_CART_ENABLED=true`, el monitor puede crear el carrito automáticamente cuando detecta disponibilidad en una alerta guardada. Por seguridad viene apagado por defecto. Con el auto-carrito activo:
 
-- se crea sólo un carrito por evento de disponibilidad y sección;
-- gana el usuario que esté escuchando ese partido/sección con mayor prioridad global;
+- por defecto se crea sólo un carrito por evento de disponibilidad y sección;
+- `AUTO_CART_MAX_PER_EVENT` controla cuántos carritos intenta crear por evento: `1` mantiene el comportamiento conservador, un número como `3` reparte hasta tres carritos, y `all` reparte hasta la cantidad disponible/usuarios elegibles;
+- los usuarios se eligen en orden de prioridad global entre quienes estén escuchando ese partido/sección;
 - las alertas `all` participan para cualquier sección disponible del partido;
 - los usuarios no ganadores reciben la alerta normal, pero no un carrito prearmado;
+- si FIFA falla al crear un carrito porque ya no hay stock, el bot registra el fallo y no intenta asignar a otro usuario en ese mismo ciclo;
 - el link abre el carrito oficial de FIFA, pero el bot no hace checkout ni pago.
 
 Para recibir una confirmación admin cuando un carrito prioritario específico se crea bien, configurá:
@@ -189,6 +192,7 @@ El ejemplo anterior corresponde a M86, `FIFA Pavilion`, qty 1 al momento de inve
 La respuesta devuelve `OrderId`, `OrderSecretId`, `SelectionTotalAmount`, `TransactionDetails` y `CheckoutRedirectUrl`. Crear la orden no hace checkout ni pago. El checkout empieza recién al abrir `CheckoutRedirectUrl`.
 
 En Telegram, el bot sólo llama automáticamente a `/next-api/orders` cuando `AUTO_CART_ENABLED=true`. Si está apagado, sólo crea órdenes cuando el usuario toca `Crear carrito` en la alerta.
+`AUTO_CART_MAX_PER_EVENT` limita cuántos carritos automáticos intenta crear por disponibilidad concreta. El default es `1`; usar `all` intenta crear links en orden de prioridad hasta agotar la disponibilidad informada o los usuarios elegibles.
 
 ## Correr 24/7 en macOS
 
@@ -246,13 +250,18 @@ TELEGRAM_BOT_TOKEN=...
 TELEGRAM_CHAT_ID=959522546
 ADMIN_CHAT_IDS=959522546
 AUTO_CART_ENABLED=true
+AUTO_CART_MAX_PER_EVENT=1
 BOT_STATE_DIR=/data/.state
 ADMIN_CART_NOTIFY_CHAT_IDS=959522546
 ADMIN_CART_NOTIFY_WATCH=8270163449:M86:SEPSTA
 BOOTSTRAP_SUBSCRIPTIONS_JSON={...}
 ```
 
-4. En Settings/Deploy, confirmar que el start command sea `npm run watch`.
+4. En Settings/Deploy, confirmar que el start command sea:
+
+```bash
+node src/monitor.js --match M86,M95,M100 --cheapest-per-category --interval 60
+```
 5. Para conservar usuarios/prioridades actuales, usar una de estas opciones:
 
 ```text

@@ -248,6 +248,15 @@ function autoCartEnabled() {
   return String(process.env.AUTO_CART_ENABLED || "").toLowerCase() === "true";
 }
 
+function autoCartMaxPerEvent() {
+  const value = String(process.env.AUTO_CART_MAX_PER_EVENT || "1").trim().toLowerCase();
+  if (value === "all") return Number.POSITIVE_INFINITY;
+
+  const count = Number(value);
+  if (!Number.isFinite(count) || count < 1) return 1;
+  return Math.floor(count);
+}
+
 function adminChatIds() {
   return new Set(
     String(process.env.ADMIN_CHAT_IDS || process.env.TELEGRAM_CHAT_ID || "")
@@ -1002,6 +1011,8 @@ export function selectAutoCartWinners(allocationCandidates, allocations = {}) {
     grouped.get(key).push(candidate);
   }
 
+  const maxPerEvent = autoCartMaxPerEvent();
+
   return [...grouped.entries()].map(([key, candidates]) => {
     candidates.sort((a, b) => {
       const priorityDiff = compareUserPriority(a.chatState, b.chatState);
@@ -1015,103 +1026,136 @@ export function selectAutoCartWinners(allocationCandidates, allocations = {}) {
       return String(a.chatId).localeCompare(String(b.chatId));
     });
 
-    return { key, winner: candidates[0] };
+    const availableQuantity = Number(candidates[0]?.summary.availableQuantity);
+    const quantityLimit = Number.isFinite(availableQuantity) && availableQuantity > 0
+      ? Math.floor(availableQuantity)
+      : candidates.length;
+    const winnerCount = Math.min(candidates.length, maxPerEvent, quantityLimit);
+
+    const winners = candidates.slice(0, winnerCount);
+    return { key, winner: winners[0], winners };
   });
 }
 
 export async function allocateAutoCarts({ allocationCandidates, nextState }) {
   const assignedKeys = new Set();
+  const assignedAllocationKeys = new Set();
   const failedAllocationKeys = new Set();
   if (!autoCartEnabled() || !telegramIsConfigured() || !allocationCandidates.length) {
-    return { assignedKeys, failedAllocationKeys };
+    return { assignedKeys, assignedAllocationKeys, failedAllocationKeys };
   }
 
   const allocations = { ...(nextState[CART_ALLOCATIONS_KEY] || {}) };
 
-  for (const { key, winner } of selectAutoCartWinners(allocationCandidates, allocations)) {
-    const option = winner.summary.cartOption;
-    let cart;
+  for (const { key, winners } of selectAutoCartWinners(allocationCandidates, allocations)) {
+    for (const winner of winners) {
+      const option = winner.summary.cartOption;
+      let cart;
 
-    try {
-      cart = await createSingleMatchCart({
-        performanceId: winner.summary.performanceId,
-        option,
-        quantity: 1
-      });
+      try {
+        cart = await createSingleMatchCart({
+          performanceId: winner.summary.performanceId,
+          option,
+          quantity: 1
+        });
 
-      const now = new Date();
-      const expiresAt = new Date(now.getTime() + CART_EXPIRY_MINUTES * 60 * 1000);
-      allocations[key] = {
-        active: true,
-        allocationKey: key,
-        chatId: String(winner.chatId),
-        priority: userPriority(winner.chatState),
-        match: winner.summary.match,
-        teams: winner.summary.teams,
-        sectionCode: option.sectionCode,
-        sectionName: option.sectionName,
-        amount: option.amount,
-        orderId: cart.OrderId,
-        checkoutRedirectUrl: cart.CheckoutRedirectUrl,
-        allocatedAt: now.toISOString(),
-        expiresAt: expiresAt.toISOString(),
-        notifiedAt: null,
-        error: null
-      };
+        const now = new Date();
+        const expiresAt = new Date(now.getTime() + CART_EXPIRY_MINUTES * 60 * 1000);
+        const item = {
+          chatId: String(winner.chatId),
+          priority: userPriority(winner.chatState),
+          orderId: cart.OrderId,
+          checkoutRedirectUrl: cart.CheckoutRedirectUrl,
+          allocatedAt: now.toISOString(),
+          expiresAt: expiresAt.toISOString(),
+          notifiedAt: null,
+          error: null
+        };
+        const previousItems = Array.isArray(allocations[key]?.items)
+          ? allocations[key].items
+          : [];
 
-      await sendTelegramMessage(formatAutoCartMessage({ summary: winner.summary, option, cart }), {
-        chatId: winner.chatId,
-        replyMarkup: mainMenuKeyboard()
-      });
+        allocations[key] = {
+          active: true,
+          allocationKey: key,
+          chatId: previousItems.length ? allocations[key]?.chatId : String(winner.chatId),
+          priority: previousItems.length ? allocations[key]?.priority : userPriority(winner.chatState),
+          match: winner.summary.match,
+          teams: winner.summary.teams,
+          sectionCode: option.sectionCode,
+          sectionName: option.sectionName,
+          amount: option.amount,
+          orderId: previousItems.length ? allocations[key]?.orderId : cart.OrderId,
+          checkoutRedirectUrl: previousItems.length ? allocations[key]?.checkoutRedirectUrl : cart.CheckoutRedirectUrl,
+          allocatedAt: previousItems.length ? allocations[key]?.allocatedAt : item.allocatedAt,
+          expiresAt: previousItems.length ? allocations[key]?.expiresAt : item.expiresAt,
+          notifiedAt: previousItems.length ? allocations[key]?.notifiedAt : null,
+          error: null,
+          items: [...previousItems, item]
+        };
 
-      if (shouldNotifyAdminCartAssignment({ chatId: winner.chatId, summary: winner.summary, option })) {
-        for (const adminChatId of adminCartNotifyChatIds()) {
-          if (String(adminChatId) === String(winner.chatId)) continue;
-          await sendTelegramMessage(formatAdminAutoCartNotification({
-            summary: winner.summary,
-            option,
-            winnerChatId: winner.chatId,
-            cart
-          }), {
-            chatId: adminChatId,
-            replyMarkup: mainMenuKeyboard()
-          });
+        await sendTelegramMessage(formatAutoCartMessage({ summary: winner.summary, option, cart }), {
+          chatId: winner.chatId,
+          replyMarkup: mainMenuKeyboard()
+        });
+
+        if (shouldNotifyAdminCartAssignment({ chatId: winner.chatId, summary: winner.summary, option })) {
+          for (const adminChatId of adminCartNotifyChatIds()) {
+            if (String(adminChatId) === String(winner.chatId)) continue;
+            await sendTelegramMessage(formatAdminAutoCartNotification({
+              summary: winner.summary,
+              option,
+              winnerChatId: winner.chatId,
+              cart
+            }), {
+              chatId: adminChatId,
+              replyMarkup: mainMenuKeyboard()
+            });
+          }
         }
-      }
 
-      allocations[key] = {
-        ...allocations[key],
-        notifiedAt: new Date().toISOString()
-      };
-      assignedKeys.add(`${winner.chatId}:${key}`);
-      console.log(`Auto cart assigned: ${key} to chat ${winner.chatId}`);
-    } catch (error) {
-      allocations[key] = allocations[key] || {
-        active: true,
-        allocationKey: key,
-        chatId: String(winner.chatId),
-        priority: userPriority(winner.chatState),
-        match: winner.summary.match,
-        teams: winner.summary.teams,
-        sectionCode: option.sectionCode,
-        sectionName: option.sectionName,
-        amount: option.amount,
-        allocatedAt: new Date().toISOString(),
-        notifiedAt: null
-      };
-      allocations[key] = {
-        ...allocations[key],
-        checkoutRedirectUrl: allocations[key].checkoutRedirectUrl || cart?.CheckoutRedirectUrl,
-        orderId: allocations[key].orderId || cart?.OrderId,
-        error: error.message
-      };
-      failedAllocationKeys.add(key);
-      console.error(`[${new Date().toISOString()}] Auto cart failed for ${key}: ${error.message}`);
+        allocations[key] = {
+          ...allocations[key],
+          items: allocations[key].items.map((currentItem) => (
+            currentItem === item
+              ? { ...currentItem, notifiedAt: new Date().toISOString() }
+              : currentItem
+          )),
+          notifiedAt: allocations[key].notifiedAt || new Date().toISOString()
+        };
+        assignedKeys.add(`${winner.chatId}:${key}`);
+        assignedAllocationKeys.add(key);
+        console.log(`Auto cart assigned: ${key} to chat ${winner.chatId}`);
+      } catch (error) {
+        allocations[key] = allocations[key] || {
+          active: true,
+          allocationKey: key,
+          chatId: String(winner.chatId),
+          priority: userPriority(winner.chatState),
+          match: winner.summary.match,
+          teams: winner.summary.teams,
+          sectionCode: option.sectionCode,
+          sectionName: option.sectionName,
+          amount: option.amount,
+          allocatedAt: new Date().toISOString(),
+          notifiedAt: null,
+          items: []
+        };
+        allocations[key] = {
+          ...allocations[key],
+          checkoutRedirectUrl: allocations[key].checkoutRedirectUrl || cart?.CheckoutRedirectUrl,
+          orderId: allocations[key].orderId || cart?.OrderId,
+          error: error.message
+        };
+        failedAllocationKeys.add(key);
+        console.error(`[${new Date().toISOString()}] Auto cart failed for ${key}: ${error.message}`);
+        break;
+      }
     }
   }
 
   nextState[CART_ALLOCATIONS_KEY] = allocations;
-  return { assignedKeys, failedAllocationKeys };
+  return { assignedKeys, assignedAllocationKeys, failedAllocationKeys };
 }
 
 async function checkSubscriptions() {
@@ -1190,7 +1234,11 @@ async function checkSubscriptions() {
 
   await recordAvailabilityEvents(matches, nextState);
 
-  const { assignedKeys: autoAssignedKeys, failedAllocationKeys } = await allocateAutoCarts({
+  const {
+    assignedKeys: autoAssignedKeys,
+    assignedAllocationKeys,
+    failedAllocationKeys
+  } = await allocateAutoCarts({
     allocationCandidates,
     nextState
   });
@@ -1201,7 +1249,11 @@ async function checkSubscriptions() {
         ? cartAllocationKey(candidate.summary)
         : null;
       const autoAssignedKey = allocationKey ? `${candidate.chatId}:${allocationKey}` : null;
-      if (allocationKey && failedAllocationKeys.has(allocationKey)) continue;
+      if (
+        allocationKey &&
+        failedAllocationKeys.has(allocationKey) &&
+        !assignedAllocationKeys.has(allocationKey)
+      ) continue;
       if (autoAssignedKey && autoAssignedKeys.has(autoAssignedKey)) continue;
 
       await sendTelegramMessage(formatTelegramAlertForSubscription(candidate.summary, candidate.subscription, {
