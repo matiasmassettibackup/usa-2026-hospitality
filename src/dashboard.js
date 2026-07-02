@@ -1,32 +1,16 @@
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { loadDotEnv } from "./config.js";
+import { readState, stateBackend, stateDir } from "./stateStore.js";
 
 const DEFAULT_PORT = 8787;
-const RUNTIME_STATE_DIR = "/Users/matiasmassetti/.fifa-hospitality-monitor/.state";
-const LOCAL_STATE_DIR = resolve(".state");
 
+await loadDotEnv();
 const port = Number(process.env.PORT || process.env.DASHBOARD_PORT || DEFAULT_PORT);
-const stateDir = process.env.DASHBOARD_STATE_DIR
-  || process.env.BOT_STATE_DIR
-  || process.env.STATE_DIR
-  || (existsSync(RUNTIME_STATE_DIR) ? RUNTIME_STATE_DIR : LOCAL_STATE_DIR);
 const DEFAULT_SUBSCRIPTIONS = [
-  { match: "M86", cheapestPerCategory: true },
   { match: "M86", section: "Suite Essentials" },
   { match: "M95", cheapestPerCategory: true },
   { match: "M100", cheapestPerCategory: true }
 ];
-
-async function readJson(path, fallback) {
-  try {
-    return JSON.parse(await readFile(path, "utf8"));
-  } catch (error) {
-    if (error.code === "ENOENT") return fallback;
-    throw error;
-  }
-}
 
 function subscriptionScope(subscription) {
   if (subscription.cheapestPerCategory) return "cheapest";
@@ -77,12 +61,11 @@ function latestDate(values) {
 }
 
 async function buildDashboardData() {
-  const subscriptionsState = await readJson(join(stateDir, "subscriptions.json"), { chats: {} });
-  const usersState = await readJson(join(stateDir, "users.json"), { chats: {} });
-  const monitorState = await readJson(join(stateDir, "hospitality-monitor.json"), {});
+  const subscriptionsState = await readState(".state/subscriptions.json");
+  const monitorState = await readState(".state/hospitality-monitor.json");
   const chats = Object.entries(subscriptionsState.chats || {});
   const users = chats.map(([chatId, chatState]) => {
-    const user = chatState.user || usersState.chats?.[chatId]?.user || {};
+    const user = chatState.user || {};
     const subscriptions = Array.isArray(chatState.subscriptions)
       ? chatState.subscriptions
       : DEFAULT_SUBSCRIPTIONS;
@@ -115,7 +98,8 @@ async function buildDashboardData() {
 
   return {
     generatedAt: new Date().toISOString(),
-    stateDir,
+    stateBackend: stateBackend(),
+    stateDir: stateDir(),
     userCount: users.length,
     alertCount: users.reduce((total, user) => total + user.alertCount, 0),
     lastCheckAt: latestDate(Object.values(monitorState).map((entry) => entry?.checkedAt)),
@@ -438,5 +422,6 @@ const server = createServer(async (request, response) => {
 
 server.listen(port, "127.0.0.1", () => {
   console.log(`Dashboard running at http://127.0.0.1:${port}`);
-  console.log(`Reading state from ${stateDir}`);
+  console.log(`State backend: ${stateBackend()}`);
+  console.log(`Reading state from ${stateDir()}`);
 });

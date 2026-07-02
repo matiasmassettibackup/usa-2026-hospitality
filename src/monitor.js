@@ -1,5 +1,4 @@
-import { access, appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join } from "node:path";
+import { access } from "node:fs/promises";
 import { loadDotEnv } from "./config.js";
 import {
   createSingleMatchCart,
@@ -17,6 +16,12 @@ import {
   sendTelegramPhoto,
   telegramIsConfigured
 } from "./telegram.js";
+import {
+  appendCsvRows,
+  readState,
+  stateBackend,
+  writeState
+} from "./stateStore.js";
 
 const DEFAULT_STATE_FILE = ".state/hospitality-monitor.json";
 const TELEGRAM_BOT_STATE_FILE = ".state/telegram-bot.json";
@@ -45,16 +50,6 @@ const DEFAULT_SUBSCRIPTIONS = [
 const RESET_SUBSCRIPTIONS = [
   { match: "M86", section: "Suite Essentials" }
 ];
-
-function stateDir() {
-  return process.env.BOT_STATE_DIR || process.env.STATE_DIR || ".state";
-}
-
-function statePath(path) {
-  if (isAbsolute(path)) return path;
-  if (path.startsWith(".state/")) return join(stateDir(), path.slice(".state/".length));
-  return path;
-}
 
 const SECTION_ALIASES = new Map([
   ["all", { allSections: true }],
@@ -150,26 +145,6 @@ Options:
 `);
 }
 
-async function readState(path) {
-  try {
-    return JSON.parse(await readFile(statePath(path), "utf8"));
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      if (path === SUBSCRIPTIONS_FILE && process.env.BOOTSTRAP_SUBSCRIPTIONS_JSON) {
-        return JSON.parse(process.env.BOOTSTRAP_SUBSCRIPTIONS_JSON);
-      }
-      return {};
-    }
-    throw error;
-  }
-}
-
-async function writeState(path, state) {
-  const targetPath = statePath(path);
-  await mkdir(dirname(targetPath), { recursive: true });
-  await writeFile(targetPath, `${JSON.stringify(state, null, 2)}\n`);
-}
-
 async function writeSubscriptionsState(nextState) {
   const currentState = await readState(SUBSCRIPTIONS_FILE);
   const mergedState = {
@@ -202,33 +177,6 @@ function formatMoney(amount) {
     currency: "USD",
     maximumFractionDigits: 0
   }).format(amount);
-}
-
-function csvCell(value) {
-  if (value == null) return "";
-  const text = String(value);
-  if (!/[",\n\r]/.test(text)) return text;
-  return `"${text.replaceAll("\"", "\"\"")}"`;
-}
-
-async function appendCsvRows(path, headers, rows) {
-  if (!rows.length) return;
-  const targetPath = statePath(path);
-
-  let needsHeader = false;
-  try {
-    await access(targetPath);
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
-    needsHeader = true;
-  }
-
-  await mkdir(dirname(targetPath), { recursive: true });
-  const lines = [
-    ...(needsHeader ? [headers.join(",")] : []),
-    ...rows.map((row) => headers.map((header) => csvCell(row[header])).join(","))
-  ];
-  await appendFile(targetPath, `${lines.join("\n")}\n`);
 }
 
 function normalizeMatchInput(value) {
@@ -1755,6 +1703,7 @@ async function main() {
     printHelp();
     return;
   }
+  console.log(`[${new Date().toISOString()}] State backend: ${stateBackend()}`);
 
   try {
     await handleTelegramCommands();

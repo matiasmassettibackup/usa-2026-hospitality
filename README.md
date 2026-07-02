@@ -253,6 +253,8 @@ ADMIN_CHAT_IDS=959522546
 AUTO_CART_ENABLED=true
 AUTO_CART_MAX_PER_EVENT=1
 BOT_STATE_DIR=/data/.state
+# STATE_BACKEND=file
+# DATABASE_URL=postgresql://...
 ADMIN_CART_NOTIFY_CHAT_IDS=959522546
 ADMIN_CART_NOTIFY_WATCH=8270163449:M86:SEPSTA
 BOOTSTRAP_SUBSCRIPTIONS_JSON={...}
@@ -271,6 +273,23 @@ node src/monitor.js --match M86,M95,M100 --cheapest-per-category --interval 60
 ```
 
 O pegar el contenido minificado de `subscriptions.json` en `BOOTSTRAP_SUBSCRIPTIONS_JSON`. El bot sólo lo usa si todavía no existe `/data/.state/subscriptions.json`.
+
+## Estado en Supabase/Postgres
+
+El bot puede usar Postgres como fuente de verdad para usuarios, alertas, estado del monitor y eventos de disponibilidad. Esto evita depender del volumen JSON para datos críticos.
+
+Variables:
+
+```bash
+STATE_BACKEND=postgres
+DATABASE_URL=postgresql://...
+```
+
+El esquema vive en `supabase/migrations`. Con Supabase CLI, aplicá las migraciones al proyecto remoto y luego migrá el estado actual:
+
+```bash
+npm run db:migrate-state
+```
 
 Cuando Railway quede activo, frená el servicio local para evitar doble polling y mensajes duplicados:
 
