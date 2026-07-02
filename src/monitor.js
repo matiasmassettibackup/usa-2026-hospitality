@@ -993,6 +993,38 @@ export function selectAutoCartWinners(allocationCandidates, allocations = {}) {
   });
 }
 
+function allocationIsActive(allocation, now = new Date()) {
+  if (!allocation?.active) return false;
+
+  const items = Array.isArray(allocation.items) ? allocation.items : [];
+  if (items.length) {
+    return items.some((item) => {
+      if (!item.expiresAt) return true;
+      return new Date(item.expiresAt).getTime() > now.getTime();
+    });
+  }
+
+  if (!allocation.expiresAt) return true;
+  return new Date(allocation.expiresAt).getTime() > now.getTime();
+}
+
+function allocationIncludesChat(allocation, chatId) {
+  const key = String(chatId);
+  const items = Array.isArray(allocation?.items) ? allocation.items : [];
+  if (items.length) return items.some((item) => String(item.chatId) === key);
+  return String(allocation?.chatId) === key;
+}
+
+function pruneExpiredCartAllocations(allocations, now = new Date()) {
+  const next = {};
+  for (const [key, allocation] of Object.entries(allocations || {})) {
+    if (allocationIsActive(allocation, now)) {
+      next[key] = allocation;
+    }
+  }
+  return next;
+}
+
 export async function allocateAutoCarts({ allocationCandidates, nextState }) {
   const assignedKeys = new Set();
   const assignedAllocationKeys = new Set();
@@ -1001,7 +1033,7 @@ export async function allocateAutoCarts({ allocationCandidates, nextState }) {
     return { assignedKeys, assignedAllocationKeys, failedAllocationKeys };
   }
 
-  const allocations = { ...(nextState[CART_ALLOCATIONS_KEY] || {}) };
+  const allocations = pruneExpiredCartAllocations(nextState[CART_ALLOCATIONS_KEY] || {});
 
   for (const { key, winners } of selectAutoCartWinners(allocationCandidates, allocations)) {
     for (const winner of winners) {
@@ -1122,7 +1154,7 @@ async function checkSubscriptions() {
   const matches = await fetchSingleMatchInventory();
   const state = await readState(DEFAULT_STATE_FILE);
   const nextState = { ...state };
-  const allocations = { ...(state[CART_ALLOCATIONS_KEY] || {}) };
+  const allocations = pruneExpiredCartAllocations(state[CART_ALLOCATIONS_KEY] || {});
   const allocationCandidates = [];
   const manualAlertCandidates = [];
   const activeAllocationKeys = new Set();
@@ -1211,9 +1243,17 @@ async function checkSubscriptions() {
         !assignedAllocationKeys.has(allocationKey)
       ) continue;
       if (autoAssignedKey && autoAssignedKeys.has(autoAssignedKey)) continue;
+      const activeAllocation = allocationKey ? nextState[CART_ALLOCATIONS_KEY]?.[allocationKey] : null;
+      const assignedToAnotherUser = Boolean(
+        autoCartEnabled() &&
+        allocationKey &&
+        activeAllocation &&
+        allocationIsActive(activeAllocation) &&
+        !allocationIncludesChat(activeAllocation, candidate.chatId)
+      );
 
       await sendTelegramMessage(formatTelegramAlertForSubscription(candidate.summary, candidate.subscription, {
-        autoCartAssignedToAnotherUser: autoCartEnabled() && Boolean(allocationKey)
+        autoCartAssignedToAnotherUser: assignedToAnotherUser
       }), {
         chatId: candidate.chatId,
         replyMarkup: matchUrlKeyboard(candidate.summary)
