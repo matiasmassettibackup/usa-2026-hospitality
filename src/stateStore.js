@@ -37,10 +37,16 @@ function db() {
     throw new Error("STATE_BACKEND=postgres requires DATABASE_URL or SUPABASE_DB_URL");
   }
 
-  pool ||= new Pool({
-    connectionString,
-    ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false }
-  });
+  if (!pool) {
+    pool = new Pool({
+      connectionString,
+      ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false }
+    });
+    pool.on("error", (error) => {
+      console.error(`[${new Date().toISOString()}] Postgres pool error: ${error.message}`);
+    });
+  }
+
   return pool;
 }
 

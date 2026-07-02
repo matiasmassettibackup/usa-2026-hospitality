@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { loadDotEnv } from "../src/config.js";
-import { writeState } from "../src/stateStore.js";
+import { closeStateStore, writeState } from "../src/stateStore.js";
 
 const STATE_FILES = [
   "subscriptions.json",
@@ -34,4 +34,5 @@ for (const file of STATE_FILES) {
   console.log(`Migrated ${file}`);
 }
 
+await closeStateStore();
 console.log("Done");
