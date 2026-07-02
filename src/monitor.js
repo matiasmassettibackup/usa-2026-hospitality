@@ -145,14 +145,20 @@ Options:
 `);
 }
 
-async function writeSubscriptionsState(nextState) {
+async function writeSubscriptionsState(nextState, changedChatIds) {
   const currentState = await readState(SUBSCRIPTIONS_FILE);
   const mergedState = {
     ...nextState,
     chats: { ...(nextState.chats || {}) }
   };
+  const changedChats = changedChatIds ? new Set([...changedChatIds].map(String)) : null;
 
   for (const [chatId, currentChat] of Object.entries(currentState.chats || {})) {
+    if (changedChats && !changedChats.has(String(chatId))) {
+      mergedState.chats[chatId] = currentChat;
+      continue;
+    }
+
     const nextChat = mergedState.chats[chatId];
     if (!nextChat) {
       mergedState.chats[chatId] = currentChat;
@@ -1332,9 +1338,18 @@ async function handleTelegramCommands() {
   const updates = await getTelegramUpdates({ offset: state.offset });
   const nextState = { ...state, pending: { ...(state.pending || {}) } };
   const startChats = new Set();
+  const changedSubscriptionChats = new Set();
+  let botStateDirty = false;
+  let subscriptionsDirty = false;
+
+  const markSubscriptionsDirty = (chatId) => {
+    subscriptionsDirty = true;
+    changedSubscriptionChats.add(String(chatId));
+  };
 
   for (const update of updates.result || []) {
     nextState.offset = update.update_id + 1;
+    botStateDirty = true;
 
     const callback = update.callback_query;
     if (callback) {
@@ -1386,6 +1401,7 @@ async function handleTelegramCommands() {
 
       if (data === "reiniciar") {
         setChatSubscriptions(subscriptionsState, chatId, RESET_SUBSCRIPTIONS);
+        markSubscriptionsDirty(chatId);
         await sendTelegramMessage("Listo. Reinicié tus alertas y dejé sólo M86 Suite Essentials.", {
           chatId,
           replyMarkup: mainMenuKeyboard()
@@ -1427,6 +1443,7 @@ async function handleTelegramCommands() {
 
       if (data === "precios_otro") {
         setPendingAction(nextState, chatId, { action: "precios" });
+        botStateDirty = true;
         await sendTelegramMessage("Mandame el número de partido para consultar precios. Ejemplo: M75", { chatId });
         continue;
       }
@@ -1442,6 +1459,7 @@ async function handleTelegramCommands() {
         }
 
         addSubscription(subscriptionsState, chatId, subscription);
+        markSubscriptionsDirty(chatId);
         await sendTelegramMessage(`Listo. Agregué alerta: ${formatSubscription(subscription)}`, {
           chatId,
           replyMarkup: mainMenuKeyboard()
@@ -1455,6 +1473,7 @@ async function handleTelegramCommands() {
           action: "seguir",
           sectionInput
         });
+        botStateDirty = true;
         const section = normalizeSectionInput(sectionInput);
         const scope = section.cheapestPerCategory
           ? "la entrada más barata de cada categoría"
@@ -1483,6 +1502,7 @@ async function handleTelegramCommands() {
     if (!command.startsWith("/")) {
       const pendingAction = popPendingAction(nextState, chatId);
       if (pendingAction) {
+        botStateDirty = true;
         const match = normalizeMatchInput(text.split(/\s+/)[0]);
         if (!match || !isValidMatchNumber(match)) {
           setPendingAction(nextState, chatId, pendingAction);
@@ -1508,6 +1528,7 @@ async function handleTelegramCommands() {
             ...normalizeSectionInput(pendingAction.sectionInput || DEFAULT_SECTION)
           };
           addSubscription(subscriptionsState, chatId, subscription);
+          markSubscriptionsDirty(chatId);
           await sendTelegramMessage(`Listo. Agregué alerta: ${formatSubscription(subscription)}`, {
             chatId,
             replyMarkup: mainMenuKeyboard()
@@ -1522,6 +1543,7 @@ async function handleTelegramCommands() {
       const currentChatState = subscriptionsState.chats?.[String(chatId)];
       if (!currentChatState || !Array.isArray(currentChatState.subscriptions)) {
         setChatSubscriptions(subscriptionsState, chatId, DEFAULT_SUBSCRIPTIONS);
+        markSubscriptionsDirty(chatId);
       }
       startChats.add(chatId);
       continue;
@@ -1579,6 +1601,7 @@ async function handleTelegramCommands() {
       }
 
       setUserPriority(subscriptionsState, targetChatId, priority);
+      markSubscriptionsDirty(targetChatId);
       await sendTelegramMessage(`Listo. Prioridad de ${targetChatId}: ${priority}`, {
         chatId,
         replyMarkup: mainMenuKeyboard()
@@ -1594,6 +1617,7 @@ async function handleTelegramCommands() {
       }
 
       addSubscription(subscriptionsState, chatId, subscription);
+      markSubscriptionsDirty(chatId);
       await sendTelegramMessage(`Listo. Agregué alerta: ${formatSubscription(subscription)}`, {
         chatId,
         replyMarkup: mainMenuKeyboard()
@@ -1620,6 +1644,7 @@ async function handleTelegramCommands() {
       const current = getChatSubscriptions(subscriptionsState, chatId);
       const next = current.filter((subscription) => subscription.match !== match);
       setChatSubscriptions(subscriptionsState, chatId, next);
+      markSubscriptionsDirty(chatId);
       await sendTelegramMessage(`Listo. Quité las alertas de ${match}.`, {
         chatId,
         replyMarkup: mainMenuKeyboard()
@@ -1629,6 +1654,7 @@ async function handleTelegramCommands() {
 
     if (command === "/reset" || command === "/reiniciar") {
       setChatSubscriptions(subscriptionsState, chatId, RESET_SUBSCRIPTIONS);
+      markSubscriptionsDirty(chatId);
       await sendTelegramMessage("Listo. Reinicié tus alertas y dejé sólo M86 Suite Essentials.", {
         chatId,
         replyMarkup: mainMenuKeyboard()
@@ -1671,7 +1697,12 @@ async function handleTelegramCommands() {
     console.log(`Telegram /start answered for chat ${chatId}`);
 
     await writeState(TELEGRAM_BOT_STATE_FILE, nextState);
-    await writeSubscriptionsState(subscriptionsState);
+    botStateDirty = false;
+    if (subscriptionsDirty) {
+      await writeSubscriptionsState(subscriptionsState, changedSubscriptionChats);
+      subscriptionsDirty = false;
+      changedSubscriptionChats.clear();
+    }
 
     await safelySendChatAction(chatId);
     await sendTelegramMessage(await buildWelcomePricesMessage(), {
@@ -1680,8 +1711,12 @@ async function handleTelegramCommands() {
     });
   }
 
-  await writeState(TELEGRAM_BOT_STATE_FILE, nextState);
-  await writeSubscriptionsState(subscriptionsState);
+  if (botStateDirty) {
+    await writeState(TELEGRAM_BOT_STATE_FILE, nextState);
+  }
+  if (subscriptionsDirty) {
+    await writeSubscriptionsState(subscriptionsState, changedSubscriptionChats);
+  }
 }
 
 function installShutdownHandlers() {
