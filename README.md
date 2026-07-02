@@ -61,7 +61,7 @@ node src/monitor.js --once --match M86 --section "VIP Lounge"
 
 El monitor guarda estado en `.state/hospitality-monitor.json` para detectar el cambio `unavailable -> available` por sección y emitir `ALERT:`.
 
-El default operativo para `M86`, `M95` y `M100` es `--cheapest-per-category`: revisa sólo la entrada más barata dentro de cada categoría/lounge de hospitalidad, en lugar de avisar por todas las secciones disponibles. Además, `M86` incluye una alerta explícita para `Suite Essentials` por si FIFA la publica como categoría separada. Si querés volver a escuchar absolutamente todo, usá `--all-sections` o `/seguir M86 all`.
+El default operativo de alertas guardadas es `M86 - Suite Essentials`, más `M95` y `M100` como `--cheapest-per-category`: revisa sólo la entrada más barata dentro de cada categoría/lounge de hospitalidad para esos partidos. Si querés volver a escuchar absolutamente todo, usá `--all-sections` o `/seguir M86 all`.
 
 Además, el bot mantiene un CSV compacto de eventos de disponibilidad para `M86`, `M95`, `M100`, `M102` y `M104`:
 
@@ -101,7 +101,7 @@ Para probar el envío:
 npm run telegram:test
 ```
 
-Cuando `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` están configurados, `npm run watch` manda Telegram automáticamente sólo cuando detecta que la sección monitoreada pasa a disponible. Por defecto, los botones principales agregan `M86`, `M95` y `M100` como `barata`, que significa la entrada más barata de cada categoría/lounge.
+Cuando `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` están configurados, `npm run watch` manda Telegram automáticamente sólo cuando detecta que la sección monitoreada pasa a disponible. Por defecto, los botones principales agregan `M86 Suite Essentials`, y `M95`/`M100` como `barata`, que significa la entrada más barata de cada categoría/lounge.
 
 Las alertas incluyen la sección exacta y cantidad disponible si FIFA la informa. El botón `Crear carrito` vuelve a validar disponibilidad y, si la sección sigue disponible, crea una orden en FIFA y responde con el link oficial de carrito. El botón `Abrir FIFA manual` queda como fallback.
 
@@ -132,7 +132,7 @@ Comandos disponibles para usuarios:
 /seguir M86 all
 /seguir M95 all
 /seguir M100 all
-/seguir M86 VIP
+/seguir M86 suite
 /precios M86
 /prioridades
 /prioridad <chatId> <numero>

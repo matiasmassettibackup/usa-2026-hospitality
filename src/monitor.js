@@ -38,7 +38,6 @@ const START_IMAGE_CANDIDATES = [
 ];
 
 const DEFAULT_SUBSCRIPTIONS = [
-  { match: "M86", cheapestPerCategory: true },
   { match: "M86", section: "Suite Essentials" },
   { match: "M95", cheapestPerCategory: true },
   { match: "M100", cheapestPerCategory: true }
@@ -441,7 +440,7 @@ function mainMenuKeyboard() {
         { text: "Precios M100", callback_data: "precios:M100" }
       ],
       [
-        { text: "Seguir M86 baratas", callback_data: "seguir:M86:cheap" },
+        { text: "Seguir M86 Suite", callback_data: "seguir:M86:suite" },
         { text: "Seguir M95 baratas", callback_data: "seguir:M95:cheap" }
       ],
       [
@@ -646,7 +645,7 @@ function baseWelcomeLines() {
     "Hola! Soy el bot de Hospitality 2026.",
     "Creado por Matias Massetti.",
     "",
-    "Por defecto ya estoy mirando M86, M95 y M100 en la entrada más barata de cada categoría de hospitality, más M86 Suite Essentials explícito.",
+    "Por defecto ya estoy mirando M86 Suite Essentials, y M95/M100 en la entrada más barata de cada categoría de hospitality.",
     "Si aparece disponibilidad en cualquiera de esos partidos, te aviso y preparo carrito automático según prioridad si está activado.",
     "",
     "Si aparece disponibilidad, te mando una alerta con partido, sede, precio y link.",
@@ -1341,7 +1340,7 @@ function helpMessage() {
     "También podés usar los botones de abajo para configurar tus alertas.",
     "",
     "/seguir M86 all",
-    "/seguir M86 barata",
+    "/seguir M86 suite",
     "/seguir M95 barata",
     "/seguir M100 barata",
     "/seguir M86 VIP",
@@ -1642,7 +1641,7 @@ async function handleTelegramCommands() {
     if (command === "/watch" || command === "/seguir") {
       const subscription = parseWatchCommand(text);
       if (!subscription || !isValidMatchNumber(subscription.match)) {
-        await sendTelegramMessage("Uso: /seguir M86 barata, /seguir M95 all o /seguir M100 VIP", { chatId });
+        await sendTelegramMessage("Uso: /seguir M86 suite, /seguir M95 all o /seguir M100 VIP", { chatId });
         continue;
       }
 
