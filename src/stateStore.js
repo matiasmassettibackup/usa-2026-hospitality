@@ -91,9 +91,19 @@ function userFromChat(chatId, chatState = {}) {
   };
 }
 
-function subscriptionColumns(chatId, subscription) {
+function userDisplayName(user) {
+  const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  if (fullName) return fullName;
+  if (user.username) return `@${user.username}`;
+  if (user.chatTitle) return user.chatTitle;
+  return user.chatId;
+}
+
+function subscriptionColumns(chatId, chatState, subscription) {
+  const user = userFromChat(chatId, chatState);
   return {
     chatId: String(chatId),
+    userDisplayName: userDisplayName(user),
     match: subscription.match,
     section: subscription.section || null,
     sectionCode: subscription.sectionCode || null,
@@ -182,13 +192,15 @@ async function writeSubscriptionsState(state) {
 
       await client.query("delete from public.subscriptions where chat_id = $1", [String(chatId)]);
       for (const subscription of chatState.subscriptions || []) {
-        const row = subscriptionColumns(chatId, subscription);
+        const row = subscriptionColumns(chatId, chatState, subscription);
         await client.query(
           `insert into public.subscriptions (
-            chat_id, match, section, section_code, cheapest_per_category, all_sections, subscription
-          ) values ($1,$2,$3,$4,$5,$6,$7)`,
+            chat_id, user_display_name, match, section, section_code,
+            cheapest_per_category, all_sections, subscription
+          ) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
           [
             row.chatId,
+            row.userDisplayName,
             row.match,
             row.section,
             row.sectionCode,
