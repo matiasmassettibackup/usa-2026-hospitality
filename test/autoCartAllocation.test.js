@@ -16,7 +16,15 @@ after(() => {
   }
 });
 
-function candidate({ chatId, priority = 0, firstSeenAt = "2026-01-01T00:00:00.000Z", match = "M86", sectionCode = "FIFA" }) {
+function candidate({
+  chatId,
+  priority = 0,
+  firstSeenAt = "2026-01-01T00:00:00.000Z",
+  match = "M86",
+  sectionCode = "FIFA",
+  quantity,
+  availableQuantity
+}) {
   return {
     chatId,
     chatState: {
@@ -25,9 +33,14 @@ function candidate({ chatId, priority = 0, firstSeenAt = "2026-01-01T00:00:00.00
         firstSeenAt
       }
     },
+    subscription: {
+      match,
+      ...(quantity ? { quantity } : {})
+    },
     summary: {
       match,
       selectedSectionCode: sectionCode,
+      availableQuantity,
       cartOption: {
         sectionCode,
         sectionName: "FIFA Pavilion",
@@ -94,6 +107,33 @@ test("does not select more users than the available quantity", () => {
     const winners = selectAutoCartWinners(candidates);
 
     assert.deepEqual(winners[0].winners.map((winner) => winner.chatId), ["100", "200"]);
+  });
+});
+
+test("honors requested cart quantity for the top-priority user", () => {
+  withAutoCartMaxPerEvent("all", () => {
+    const winners = selectAutoCartWinners([
+      candidate({ chatId: "100", priority: 1, quantity: 2, availableQuantity: 2 }),
+      candidate({ chatId: "200", priority: 2, availableQuantity: 2 })
+    ]);
+
+    assert.deepEqual(winners[0].winners.map((winner) => [winner.chatId, winner.cartQuantity]), [
+      ["100", 2]
+    ]);
+  });
+});
+
+test("allocates remaining quantity to the next priority user", () => {
+  withAutoCartMaxPerEvent("all", () => {
+    const winners = selectAutoCartWinners([
+      candidate({ chatId: "100", priority: 1, quantity: 2, availableQuantity: 3 }),
+      candidate({ chatId: "200", priority: 2, availableQuantity: 3 })
+    ]);
+
+    assert.deepEqual(winners[0].winners.map((winner) => [winner.chatId, winner.cartQuantity]), [
+      ["100", 2],
+      ["200", 1]
+    ]);
   });
 });
 

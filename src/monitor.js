@@ -264,6 +264,17 @@ function compareUserPriority(aChatState, bChatState) {
   return 0;
 }
 
+function desiredAutoCartQuantity(candidate) {
+  const value = Number(
+    candidate.subscription?.quantity ??
+    candidate.subscription?.autoCartQuantity ??
+    candidate.subscription?.cartQuantity ??
+    1
+  );
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  return Math.min(6, Math.floor(value));
+}
+
 function setUserPriority(subscriptionsState, chatId, priority) {
   const key = String(chatId);
   subscriptionsState.chats = subscriptionsState.chats || {};
@@ -565,14 +576,15 @@ function formatTelegramAlertForSubscription(summary, subscription, { autoCartAss
 }
 
 function formatAutoCartMessage({ summary, option, cart }) {
+  const quantity = Number(cart.SelectedQuantity || cart.Quantity || cart.quantity || 1) || 1;
   const expiresAt = new Date(Date.now() + CART_EXPIRY_MINUTES * 60 * 1000);
 
   return [
     "Carrito FIFA asignado",
     "",
     `${summary.match} - ${summary.teams}`,
-    `${option.sectionName}: ${formatMoney(option.amount)} x 1`,
-    `Total: ${formatMoney(cart.SelectionTotalAmount ?? option.amount)}`,
+    `${option.sectionName}: ${formatMoney(option.amount)} x ${quantity}`,
+    `Total: ${formatMoney(cart.SelectionTotalAmount ?? option.amount * quantity)}`,
     "",
     cart.CheckoutRedirectUrl,
     "",
@@ -582,12 +594,13 @@ function formatAutoCartMessage({ summary, option, cart }) {
 }
 
 function formatAdminAutoCartNotification({ summary, option, winnerChatId, cart }) {
+  const quantity = Number(cart.SelectedQuantity || cart.Quantity || cart.quantity || 1) || 1;
   return [
     "Confirmación carrito prioritario",
     "",
     `Usuario: ${winnerChatId}`,
     `${summary.match} - ${summary.teams}`,
-    `${option.sectionName}: ${formatMoney(option.amount)} x 1`,
+    `${option.sectionName}: ${formatMoney(option.amount)} x ${quantity}`,
     `Orden FIFA: ${cart.OrderId}`,
     "",
     "El link de carrito fue enviado correctamente al usuario prioritario."
@@ -986,9 +999,16 @@ export function selectAutoCartWinners(allocationCandidates, allocations = {}) {
     const quantityLimit = Number.isFinite(availableQuantity) && availableQuantity > 0
       ? Math.floor(availableQuantity)
       : candidates.length;
-    const winnerCount = Math.min(candidates.length, maxPerEvent, quantityLimit);
+    const winners = [];
+    let remainingQuantity = quantityLimit;
 
-    const winners = candidates.slice(0, winnerCount);
+    for (const candidate of candidates) {
+      if (winners.length >= maxPerEvent || remainingQuantity <= 0) break;
+      const cartQuantity = Math.min(desiredAutoCartQuantity(candidate), remainingQuantity);
+      winners.push({ ...candidate, cartQuantity });
+      remainingQuantity -= cartQuantity;
+    }
+
     return { key, winner: winners[0], winners };
   });
 }
@@ -1044,14 +1064,16 @@ export async function allocateAutoCarts({ allocationCandidates, nextState }) {
         cart = await createSingleMatchCart({
           performanceId: winner.summary.performanceId,
           option,
-          quantity: 1
+          quantity: winner.cartQuantity || 1
         });
+        cart = { ...cart, SelectedQuantity: winner.cartQuantity || 1 };
 
         const now = new Date();
         const expiresAt = new Date(now.getTime() + CART_EXPIRY_MINUTES * 60 * 1000);
         const item = {
           chatId: String(winner.chatId),
           priority: userPriority(winner.chatState),
+          quantity: winner.cartQuantity || 1,
           orderId: cart.OrderId,
           checkoutRedirectUrl: cart.CheckoutRedirectUrl,
           allocatedAt: now.toISOString(),
