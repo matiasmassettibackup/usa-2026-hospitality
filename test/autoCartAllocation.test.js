@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test, { after, beforeEach } from "node:test";
-import { allocateAutoCarts, selectAutoCartWinners } from "../src/monitor.js";
+import { allocateAutoCarts, autoCartAllowedForMatch, selectAutoCartWinners } from "../src/monitor.js";
 
 const originalAutoCartMaxPerEvent = process.env.AUTO_CART_MAX_PER_EVENT;
+const originalAutoCartDisabledMatches = process.env.AUTO_CART_DISABLED_MATCHES;
 
 beforeEach(() => {
   delete process.env.AUTO_CART_MAX_PER_EVENT;
@@ -13,6 +14,12 @@ after(() => {
     delete process.env.AUTO_CART_MAX_PER_EVENT;
   } else {
     process.env.AUTO_CART_MAX_PER_EVENT = originalAutoCartMaxPerEvent;
+  }
+
+  if (originalAutoCartDisabledMatches == null) {
+    delete process.env.AUTO_CART_DISABLED_MATCHES;
+  } else {
+    process.env.AUTO_CART_DISABLED_MATCHES = originalAutoCartDisabledMatches;
   }
 });
 
@@ -185,4 +192,11 @@ test("allocateAutoCarts reports empty assigned and failed sets when disabled", a
 
   assert.deepEqual([...result.assignedKeys], []);
   assert.deepEqual([...result.failedAllocationKeys], []);
+});
+
+test("can disable auto cart for a specific match", () => {
+  process.env.AUTO_CART_DISABLED_MATCHES = "M95";
+
+  assert.equal(autoCartAllowedForMatch("M95"), false);
+  assert.equal(autoCartAllowedForMatch("M100"), true);
 });

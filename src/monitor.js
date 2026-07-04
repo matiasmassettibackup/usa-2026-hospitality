@@ -213,6 +213,19 @@ function autoCartMaxPerEvent() {
   return Math.floor(count);
 }
 
+function autoCartDisabledMatches() {
+  return new Set(
+    String(process.env.AUTO_CART_DISABLED_MATCHES || "")
+      .split(",")
+      .map((value) => normalizeMatchInput(value))
+      .filter(Boolean)
+  );
+}
+
+export function autoCartAllowedForMatch(match) {
+  return !autoCartDisabledMatches().has(normalizeMatchInput(match));
+}
+
 function adminChatIds() {
   return new Set(
     String(process.env.ADMIN_CHAT_IDS || process.env.TELEGRAM_CHAT_ID || "")
@@ -1211,7 +1224,7 @@ async function checkSubscriptions() {
       const becameAvailable = summary.isAvailable && previous?.isAvailable === false;
       const firstSeenAvailable = summary.isAvailable && previous == null;
 
-      if (summary.isAvailable && summary.selectedSectionCode) {
+      if (summary.isAvailable && summary.selectedSectionCode && autoCartAllowedForMatch(summary.match)) {
         const allocationKey = cartAllocationKey(summary);
         activeAllocationKeys.add(allocationKey);
         allocationCandidates.push({ chatId, chatState, subscription, summary });
