@@ -83,6 +83,7 @@ TELEGRAM_BOT_TOKEN=123456789:replace_me
 TELEGRAM_CHAT_ID=123456789
 AUTO_CART_ENABLED=false
 # AUTO_CART_MAX_PER_EVENT=1
+# AUTO_CART_DISABLED_MATCHES=M95
 BOT_STATE_DIR=.state
 # ADMIN_CART_NOTIFY_CHAT_IDS=123456789
 # ADMIN_CART_NOTIFY_WATCH=8270163449:M86:SEPSTA
@@ -109,6 +110,8 @@ Si `AUTO_CART_ENABLED=true`, el monitor puede crear el carrito automáticamente 
 
 - por defecto se crea sólo un carrito por evento de disponibilidad y sección;
 - `AUTO_CART_MAX_PER_EVENT` controla cuántos carritos intenta crear por evento: `1` mantiene el comportamiento conservador, un número como `3` reparte hasta tres carritos, y `all` reparte hasta la cantidad disponible/usuarios elegibles;
+- `AUTO_CART_DISABLED_MATCHES` permite excluir partidos del auto-carrito sin apagar sus alertas, por ejemplo `AUTO_CART_DISABLED_MATCHES=M95`; esos partidos siguen notificando disponibilidad normal por Telegram;
+- una suscripción puede incluir `quantity`, `autoCartQuantity` o `cartQuantity` para pedir más de una entrada en el carrito automático; el bot nunca pide más que la cantidad disponible informada y limita cada carrito a 6;
 - los usuarios se eligen en orden de prioridad global entre quienes estén escuchando ese partido/sección;
 - las alertas `all` participan para cualquier sección disponible del partido;
 - los usuarios no ganadores reciben la alerta normal, pero no un carrito prearmado;
@@ -194,6 +197,15 @@ La respuesta devuelve `OrderId`, `OrderSecretId`, `SelectionTotalAmount`, `Trans
 
 En Telegram, el bot sólo llama automáticamente a `/next-api/orders` cuando `AUTO_CART_ENABLED=true`. Si está apagado, sólo crea órdenes cuando el usuario toca `Crear carrito` en la alerta.
 `AUTO_CART_MAX_PER_EVENT` limita cuántos carritos automáticos intenta crear por disponibilidad concreta. El default es `1`; usar `all` intenta crear links en orden de prioridad hasta agotar la disponibilidad informada o los usuarios elegibles.
+`AUTO_CART_DISABLED_MATCHES` acepta una lista separada por comas (`M95,M100`) para que esos partidos sólo manden alertas, sin generar carritos automáticos. Esto es útil cuando ya no se necesita reservar carrito para un partido pero se quiere seguir viendo disponibilidad.
+
+Ejemplo de suscripción con cantidad deseada:
+
+```json
+{ "match": "M95", "section": "Suite Essentials", "quantity": 2 }
+```
+
+Si aparecen dos o más entradas, el carrito automático intenta pedir 2; si aparece sólo una, pide 1. Si sobra disponibilidad y `AUTO_CART_MAX_PER_EVENT` lo permite, el resto se reparte al siguiente usuario por prioridad.
 
 ## Correr 24/7 en macOS
 
@@ -252,6 +264,7 @@ TELEGRAM_CHAT_ID=959522546
 ADMIN_CHAT_IDS=959522546
 AUTO_CART_ENABLED=true
 AUTO_CART_MAX_PER_EVENT=1
+AUTO_CART_DISABLED_MATCHES=M95
 BOT_STATE_DIR=/data/.state
 # STATE_BACKEND=file
 # DATABASE_URL=postgresql://...
