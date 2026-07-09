@@ -7,9 +7,9 @@ const DEFAULT_PORT = 8787;
 await loadDotEnv();
 const port = Number(process.env.PORT || process.env.DASHBOARD_PORT || DEFAULT_PORT);
 const DEFAULT_SUBSCRIPTIONS = [
-  { match: "M86", section: "Suite Essentials" },
-  { match: "M95", cheapestPerCategory: true },
-  { match: "M100", cheapestPerCategory: true }
+  { match: "M100", cheapestPerCategory: true },
+  { match: "M102", cheapestPerCategory: true },
+  { match: "M104", cheapestPerCategory: true }
 ];
 
 function subscriptionScope(subscription) {

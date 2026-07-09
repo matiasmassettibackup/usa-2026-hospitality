@@ -23,13 +23,13 @@ Cuando una alerta usa `all`, el bot consulta también lounges/secciones y elige 
 
 El monitor escucha por defecto:
 
-- `M86` - Argentina vs Cabo Verde, Miami Stadium
-- `M95`
 - `M100`
+- `M102`
+- `M104`
 
 ## Comandos
 
-Chequeo puntual de M86, M95 y M100, por defecto en la entrada más barata de cada categoría:
+Chequeo puntual de M100, M102 y M104, por defecto en la entrada más barata de cada categoría:
 
 ```bash
 npm run check
@@ -50,20 +50,20 @@ npm run list-dallas
 Ejemplos directos:
 
 ```bash
-node src/monitor.js --once --match M86
-node src/monitor.js --once --match M86,M95,M100 --cheapest-per-category
-node src/monitor.js --match M86 --cheapest-per-category --interval 30
+node src/monitor.js --once --match M100
+node src/monitor.js --once --match M100,M102,M104 --cheapest-per-category
+node src/monitor.js --match M100 --cheapest-per-category --interval 30
 node src/monitor.js --once --venue NN_DAL
 node src/monitor.js --once --team Argentina
 node src/monitor.js --once --match M100 --all-sections
-node src/monitor.js --once --match M86 --section "VIP Lounge"
+node src/monitor.js --once --match M104 --section "VIP Lounge"
 ```
 
 El monitor guarda estado en `.state/hospitality-monitor.json` para detectar el cambio `unavailable -> available` por sección y emitir `ALERT:`.
 
-El default operativo de alertas guardadas es `M86 - Suite Essentials`, más `M95` y `M100` como `--cheapest-per-category`: revisa sólo la entrada más barata dentro de cada categoría/lounge de hospitalidad para esos partidos. Si querés volver a escuchar absolutamente todo, usá `--all-sections` o `/seguir M86 all`.
+El default operativo de alertas guardadas es `M100`, `M102` y `M104` como `--cheapest-per-category`: revisa sólo la entrada más barata dentro de cada categoría/lounge de hospitalidad para esos partidos. Si querés volver a escuchar absolutamente todo, usá `--all-sections` o `/seguir M104 all`.
 
-Además, el bot mantiene un CSV compacto de eventos de disponibilidad para `M86`, `M95`, `M100`, `M102` y `M104`:
+Además, el bot mantiene un CSV compacto de eventos de disponibilidad para `M100`, `M102` y `M104`:
 
 ```text
 /Users/matiasmassetti/.fifa-hospitality-monitor/.state/availability-events.csv
@@ -83,10 +83,10 @@ TELEGRAM_BOT_TOKEN=123456789:replace_me
 TELEGRAM_CHAT_ID=123456789
 AUTO_CART_ENABLED=false
 # AUTO_CART_MAX_PER_EVENT=1
-# AUTO_CART_DISABLED_MATCHES=M95
+# AUTO_CART_DISABLED_MATCHES=
 BOT_STATE_DIR=.state
 # ADMIN_CART_NOTIFY_CHAT_IDS=123456789
-# ADMIN_CART_NOTIFY_WATCH=8270163449:M86:SEPSTA
+# ADMIN_CART_NOTIFY_WATCH=
 # BOOTSTRAP_SUBSCRIPTIONS_JSON={"chats":{}}
 ```
 
@@ -102,7 +102,7 @@ Para probar el envío:
 npm run telegram:test
 ```
 
-Cuando `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` están configurados, `npm run watch` manda Telegram automáticamente sólo cuando detecta que la sección monitoreada pasa a disponible. Por defecto, los botones principales agregan `M86 Suite Essentials`, y `M95`/`M100` como `barata`, que significa la entrada más barata de cada categoría/lounge.
+Cuando `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` están configurados, `npm run watch` manda Telegram automáticamente sólo cuando detecta que la sección monitoreada pasa a disponible. Por defecto, los botones principales agregan `M100`, `M102` y `M104` como `barata`, que significa la entrada más barata de cada categoría/lounge.
 
 Las alertas incluyen la sección exacta y cantidad disponible si FIFA la informa. El botón `Crear carrito` vuelve a validar disponibilidad y, si la sección sigue disponible, crea una orden en FIFA y responde con el link oficial de carrito. El botón `Abrir FIFA manual` queda como fallback.
 
@@ -110,7 +110,7 @@ Si `AUTO_CART_ENABLED=true`, el monitor puede crear el carrito automáticamente 
 
 - por defecto se crea sólo un carrito por evento de disponibilidad y sección;
 - `AUTO_CART_MAX_PER_EVENT` controla cuántos carritos intenta crear por evento: `1` mantiene el comportamiento conservador, un número como `3` reparte hasta tres carritos, y `all` reparte hasta la cantidad disponible/usuarios elegibles;
-- `AUTO_CART_DISABLED_MATCHES` permite excluir partidos del auto-carrito sin apagar sus alertas, por ejemplo `AUTO_CART_DISABLED_MATCHES=M95`; esos partidos siguen notificando disponibilidad normal por Telegram;
+- `AUTO_CART_DISABLED_MATCHES` permite excluir partidos del auto-carrito sin apagar sus alertas, por ejemplo `AUTO_CART_DISABLED_MATCHES=M104`; esos partidos siguen notificando disponibilidad normal por Telegram;
 - una suscripción puede incluir `quantity`, `autoCartQuantity` o `cartQuantity` para pedir más de una entrada en el carrito automático; el bot nunca pide más que la cantidad disponible informada y limita cada carrito a 6;
 - los usuarios se eligen en orden de prioridad global entre quienes estén escuchando ese partido/sección;
 - las alertas `all` participan para cualquier sección disponible del partido;
@@ -122,21 +122,20 @@ Para recibir una confirmación admin cuando un carrito prioritario específico s
 
 ```bash
 ADMIN_CART_NOTIFY_CHAT_IDS=959522546
-ADMIN_CART_NOTIFY_WATCH=8270163449:M86:SEPSTA
+ADMIN_CART_NOTIFY_WATCH=8270163449:M104:A_STD
 ```
 
-El formato de `ADMIN_CART_NOTIFY_WATCH` es `<chatId>:<match>:<sectionCode>`. Por defecto queda cubierto Francisco `8270163449`, `M86`, `SEPSTA` (`Suite Essentials`).
+El formato de `ADMIN_CART_NOTIFY_WATCH` es `<chatId>:<match>:<sectionCode>`. Si queda vacío, no se envían confirmaciones admin específicas por carrito.
 
 El bot también responde `/start` con una bienvenida en español. Si existe `assets/la-banda-argentina.jpg`, la manda como foto junto al mensaje.
 
 Comandos disponibles para usuarios:
 
 ```text
-/seguir M86 all
-/seguir M95 all
 /seguir M100 all
-/seguir M86 suite
-/precios M86
+/seguir M102 barata
+/seguir M104 all
+/precios M100
 /prioridades
 /prioridad <chatId> <numero>
 /lista
@@ -146,7 +145,7 @@ Comandos disponibles para usuarios:
 ```
 
 `/prioridad` y `/prioridades` son comandos admin. Por defecto el admin es `TELEGRAM_CHAT_ID`; se puede configurar una lista separada con `ADMIN_CHAT_IDS=123,456`.
-`/reiniciar` y el botón `Reiniciar alertas` dejan al usuario sólo con `M86 - Suite Essentials`.
+`/reiniciar` y el botón `Reiniciar alertas` dejan al usuario con `M100`, `M102` y `M104` en la entrada más barata por categoría.
 
 Las preferencias se guardan localmente por chat en:
 
@@ -191,18 +190,18 @@ Payload para single match:
 }
 ```
 
-El ejemplo anterior corresponde a M86, `FIFA Pavilion`, qty 1 al momento de investigarlo. Los IDs deben salir siempre de los endpoints vivos de `matches-all` y `lounges`; no deben hardcodearse para producción.
+El ejemplo anterior corresponde a una selección puntual investigada en vivo, qty 1. Los IDs deben salir siempre de los endpoints vivos de `matches-all` y `lounges`; no deben hardcodearse para producción.
 
 La respuesta devuelve `OrderId`, `OrderSecretId`, `SelectionTotalAmount`, `TransactionDetails` y `CheckoutRedirectUrl`. Crear la orden no hace checkout ni pago. El checkout empieza recién al abrir `CheckoutRedirectUrl`.
 
 En Telegram, el bot sólo llama automáticamente a `/next-api/orders` cuando `AUTO_CART_ENABLED=true`. Si está apagado, sólo crea órdenes cuando el usuario toca `Crear carrito` en la alerta.
 `AUTO_CART_MAX_PER_EVENT` limita cuántos carritos automáticos intenta crear por disponibilidad concreta. El default es `1`; usar `all` intenta crear links en orden de prioridad hasta agotar la disponibilidad informada o los usuarios elegibles.
-`AUTO_CART_DISABLED_MATCHES` acepta una lista separada por comas (`M95,M100`) para que esos partidos sólo manden alertas, sin generar carritos automáticos. Esto es útil cuando ya no se necesita reservar carrito para un partido pero se quiere seguir viendo disponibilidad.
+`AUTO_CART_DISABLED_MATCHES` acepta una lista separada por comas (`M102,M104`) para que esos partidos sólo manden alertas, sin generar carritos automáticos. Esto es útil cuando ya no se necesita reservar carrito para un partido pero se quiere seguir viendo disponibilidad.
 
 Ejemplo de suscripción con cantidad deseada:
 
 ```json
-{ "match": "M95", "section": "Suite Essentials", "quantity": 2 }
+{ "match": "M104", "section": "VIP", "quantity": 2 }
 ```
 
 Si aparecen dos o más entradas, el carrito automático intenta pedir 2; si aparece sólo una, pide 1. Si sobra disponibilidad y `AUTO_CART_MAX_PER_EVENT` lo permite, el resto se reparte al siguiente usuario por prioridad.
@@ -264,19 +263,19 @@ TELEGRAM_CHAT_ID=959522546
 ADMIN_CHAT_IDS=959522546
 AUTO_CART_ENABLED=true
 AUTO_CART_MAX_PER_EVENT=1
-AUTO_CART_DISABLED_MATCHES=M95
+AUTO_CART_DISABLED_MATCHES=
 BOT_STATE_DIR=/data/.state
 # STATE_BACKEND=file
 # DATABASE_URL=postgresql://...
 ADMIN_CART_NOTIFY_CHAT_IDS=959522546
-ADMIN_CART_NOTIFY_WATCH=8270163449:M86:SEPSTA
+ADMIN_CART_NOTIFY_WATCH=
 BOOTSTRAP_SUBSCRIPTIONS_JSON={...}
 ```
 
 4. En Settings/Deploy, confirmar que el start command sea:
 
 ```bash
-node src/monitor.js --match M86,M95,M100 --cheapest-per-category --interval 60
+node src/monitor.js --match M100,M102,M104 --cheapest-per-category --interval 60
 ```
 5. Para conservar usuarios/prioridades actuales, usar una de estas opciones:
 

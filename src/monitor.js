@@ -29,12 +29,12 @@ const SUBSCRIPTIONS_FILE = ".state/subscriptions.json";
 const CART_ALLOCATIONS_KEY = "__cartAllocations";
 const AVAILABILITY_EVENTS_KEY = "__availabilityEvents";
 const AVAILABILITY_EVENTS_FILE = ".state/availability-events.csv";
-const AVAILABILITY_LOG_MATCHES = ["M86", "M95", "M100", "M102", "M104"];
+const AVAILABILITY_LOG_MATCHES = ["M100", "M102", "M104"];
 const DEFAULT_SECTION = "Suite Essentials";
-const DEFAULT_MATCHES = "M86,M95,M100";
+const DEFAULT_MATCHES = "M100,M102,M104";
 const COMMAND_POLL_INTERVAL_SECONDS = 1;
 const CART_EXPIRY_MINUTES = 15;
-const DEFAULT_ADMIN_CART_NOTIFY_WATCH = "8270163449:M86:SEPSTA";
+const DEFAULT_ADMIN_CART_NOTIFY_WATCH = "";
 const START_IMAGE_CANDIDATES = [
   "assets/la-banda-argentina.png",
   "assets/la-banda-argentina.jpg",
@@ -43,12 +43,14 @@ const START_IMAGE_CANDIDATES = [
 ];
 
 const DEFAULT_SUBSCRIPTIONS = [
-  { match: "M86", section: "Suite Essentials" },
-  { match: "M95", cheapestPerCategory: true },
-  { match: "M100", cheapestPerCategory: true }
+  { match: "M100", cheapestPerCategory: true },
+  { match: "M102", cheapestPerCategory: true },
+  { match: "M104", cheapestPerCategory: true }
 ];
 const RESET_SUBSCRIPTIONS = [
-  { match: "M86", section: "Suite Essentials" }
+  { match: "M100", cheapestPerCategory: true },
+  { match: "M102", cheapestPerCategory: true },
+  { match: "M104", cheapestPerCategory: true }
 ];
 
 const SECTION_ALIASES = new Map([
@@ -124,15 +126,15 @@ function parseArgs(argv) {
 
 function printHelp() {
   console.log(`Usage:
-  node src/monitor.js --once --match M86
-  node src/monitor.js --once --match M86,M95,M100 --cheapest-per-category
-  node src/monitor.js --match M86 --cheapest-per-category --interval 60
+  node src/monitor.js --once --match M100
+  node src/monitor.js --once --match M100,M102,M104 --cheapest-per-category
+  node src/monitor.js --match M100 --cheapest-per-category --interval 60
   node src/monitor.js --once --venue NN_DAL
   node src/monitor.js --once --team Argentina
   node src/monitor.js --once --match M100 --all-sections
 
 Options:
-  --match M86,M95,M100         Match number(s) to watch. Defaults to M86,M95,M100.
+  --match M100,M102,M104       Match number(s) to watch. Defaults to M100,M102,M104.
   --venue NN_DAL               Optional venue filter.
   --team Argentina             Optional team name filter.
   --section "Suite Essentials" Seating section to watch. Defaults to Suite Essentials.
@@ -413,16 +415,16 @@ function mainMenuKeyboard() {
         { text: "Estado", callback_data: "estado" }
       ],
       [
-        { text: "Precios M86", callback_data: "precios:M86" },
-        { text: "Precios M95", callback_data: "precios:M95" },
-        { text: "Precios M100", callback_data: "precios:M100" }
+        { text: "Precios M100", callback_data: "precios:M100" },
+        { text: "Precios M102", callback_data: "precios:M102" },
+        { text: "Precios M104", callback_data: "precios:M104" }
       ],
       [
-        { text: "Seguir M86 Suite", callback_data: "seguir:M86:suite" },
-        { text: "Seguir M95 baratas", callback_data: "seguir:M95:cheap" }
+        { text: "Seguir M100 baratas", callback_data: "seguir:M100:cheap" },
+        { text: "Seguir M102 baratas", callback_data: "seguir:M102:cheap" }
       ],
       [
-        { text: "Seguir M100 baratas", callback_data: "seguir:M100:cheap" }
+        { text: "Seguir M104 baratas", callback_data: "seguir:M104:cheap" }
       ],
       [
         { text: "Otro partido Suite", callback_data: "otro:suite" },
@@ -625,7 +627,7 @@ function baseWelcomeLines() {
     "Hola! Soy el bot de Hospitality 2026.",
     "Creado por Matias Massetti.",
     "",
-    "Por defecto ya estoy mirando M86 Suite Essentials, y M95/M100 en la entrada más barata de cada categoría de hospitality.",
+    "Por defecto ya estoy mirando M100, M102 y M104 en la entrada más barata de cada categoría de hospitality.",
     "Si aparece disponibilidad en cualquiera de esos partidos, te aviso y preparo carrito automático según prioridad si está activado.",
     "",
     "Si aparece disponibilidad, te mando una alerta con partido, sede, precio y link.",
@@ -636,7 +638,7 @@ function baseWelcomeLines() {
     "",
     "Usá los botones para cambiar alertas, ver precios o seguir otros partidos.",
     "",
-    "Los precios son valores 'desde' y pueden cambiar. Tocá Precios M86, M95 o M100 para verlos actualizados."
+    "Los precios son valores 'desde' y pueden cambiar. Tocá Precios M100, M102 o M104 para verlos actualizados."
   ];
 }
 
@@ -1304,7 +1306,7 @@ async function checkSubscriptions() {
 
 async function buildPricesMessage(matchInput) {
   const matchNumber = normalizeMatchInput(matchInput);
-  if (!matchNumber) return "Uso: /precios M86";
+  if (!matchNumber) return "Uso: /precios M100";
 
   const match = filterMatches(await fetchSingleMatchInventory(), { match: matchNumber })[0];
   if (!match) return `No encontre ${matchNumber}.`;
@@ -1368,12 +1370,11 @@ function helpMessage() {
     "",
     "También podés usar los botones de abajo para configurar tus alertas.",
     "",
-    "/seguir M86 all",
-    "/seguir M86 suite",
-    "/seguir M95 barata",
     "/seguir M100 barata",
-    "/seguir M86 VIP",
-    "/precios M86",
+    "/seguir M102 barata",
+    "/seguir M104 barata",
+    "/seguir M104 all",
+    "/precios M100",
     "/prioridades",
     "/prioridad <chatId> <numero>",
     "/lista",
@@ -1477,7 +1478,7 @@ async function handleTelegramCommands() {
       if (data === "reiniciar") {
         setChatSubscriptions(subscriptionsState, chatId, RESET_SUBSCRIPTIONS);
         markSubscriptionsDirty(chatId);
-        await sendTelegramMessage("Listo. Reinicié tus alertas y dejé sólo M86 Suite Essentials.", {
+        await sendTelegramMessage("Listo. Reinicié tus alertas y dejé M100, M102 y M104 baratas.", {
           chatId,
           replyMarkup: mainMenuKeyboard()
         });
@@ -1687,7 +1688,7 @@ async function handleTelegramCommands() {
     if (command === "/watch" || command === "/seguir") {
       const subscription = parseWatchCommand(text);
       if (!subscription || !isValidMatchNumber(subscription.match)) {
-        await sendTelegramMessage("Uso: /seguir M86 suite, /seguir M95 all o /seguir M100 VIP", { chatId });
+        await sendTelegramMessage("Uso: /seguir M100 barata, /seguir M102 all o /seguir M104 VIP", { chatId });
         continue;
       }
 
@@ -1730,7 +1731,7 @@ async function handleTelegramCommands() {
     if (command === "/reset" || command === "/reiniciar") {
       setChatSubscriptions(subscriptionsState, chatId, RESET_SUBSCRIPTIONS);
       markSubscriptionsDirty(chatId);
-      await sendTelegramMessage("Listo. Reinicié tus alertas y dejé sólo M86 Suite Essentials.", {
+      await sendTelegramMessage("Listo. Reinicié tus alertas y dejé M100, M102 y M104 baratas.", {
         chatId,
         replyMarkup: mainMenuKeyboard()
       });
