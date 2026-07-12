@@ -29,9 +29,9 @@ const SUBSCRIPTIONS_FILE = ".state/subscriptions.json";
 const CART_ALLOCATIONS_KEY = "__cartAllocations";
 const AVAILABILITY_EVENTS_KEY = "__availabilityEvents";
 const AVAILABILITY_EVENTS_FILE = ".state/availability-events.csv";
-const AVAILABILITY_LOG_MATCHES = ["M100", "M102", "M104"];
+const AVAILABILITY_LOG_MATCHES = ["M102", "M104"];
 const DEFAULT_SECTION = "Suite Essentials";
-const DEFAULT_MATCHES = "M100,M102,M104";
+const DEFAULT_MATCHES = "M102,M104";
 const COMMAND_POLL_INTERVAL_SECONDS = 1;
 const CART_EXPIRY_MINUTES = 15;
 const DEFAULT_ADMIN_CART_NOTIFY_WATCH = "";
@@ -43,12 +43,10 @@ const START_IMAGE_CANDIDATES = [
 ];
 
 const DEFAULT_SUBSCRIPTIONS = [
-  { match: "M100", cheapestPerCategory: true },
   { match: "M102", cheapestPerCategory: true },
   { match: "M104", cheapestPerCategory: true }
 ];
 const RESET_SUBSCRIPTIONS = [
-  { match: "M100", cheapestPerCategory: true },
   { match: "M102", cheapestPerCategory: true },
   { match: "M104", cheapestPerCategory: true }
 ];
@@ -126,15 +124,15 @@ function parseArgs(argv) {
 
 function printHelp() {
   console.log(`Usage:
-  node src/monitor.js --once --match M100
-  node src/monitor.js --once --match M100,M102,M104 --cheapest-per-category
-  node src/monitor.js --match M100 --cheapest-per-category --interval 60
+  node src/monitor.js --once --match M102
+  node src/monitor.js --once --match M102,M104 --cheapest-per-category
+  node src/monitor.js --match M102 --cheapest-per-category --interval 60
   node src/monitor.js --once --venue NN_DAL
   node src/monitor.js --once --team Argentina
-  node src/monitor.js --once --match M100 --all-sections
+  node src/monitor.js --once --match M104 --all-sections
 
 Options:
-  --match M100,M102,M104       Match number(s) to watch. Defaults to M100,M102,M104.
+  --match M102,M104            Match number(s) to watch. Defaults to M102,M104.
   --venue NN_DAL               Optional venue filter.
   --team Argentina             Optional team name filter.
   --section "Suite Essentials" Seating section to watch. Defaults to Suite Essentials.
@@ -415,12 +413,10 @@ function mainMenuKeyboard() {
         { text: "Estado", callback_data: "estado" }
       ],
       [
-        { text: "Precios M100", callback_data: "precios:M100" },
         { text: "Precios M102", callback_data: "precios:M102" },
         { text: "Precios M104", callback_data: "precios:M104" }
       ],
       [
-        { text: "Seguir M100 baratas", callback_data: "seguir:M100:cheap" },
         { text: "Seguir M102 baratas", callback_data: "seguir:M102:cheap" }
       ],
       [
@@ -627,7 +623,7 @@ function baseWelcomeLines() {
     "Hola! Soy el bot de Hospitality 2026.",
     "Creado por Matias Massetti.",
     "",
-    "Por defecto ya estoy mirando M100, M102 y M104 en la entrada más barata de cada categoría de hospitality.",
+    "Por defecto ya estoy mirando M102 y M104 en la entrada más barata de cada categoría de hospitality.",
     "Si aparece disponibilidad en cualquiera de esos partidos, te aviso y preparo carrito automático según prioridad si está activado.",
     "",
     "Si aparece disponibilidad, te mando una alerta con partido, sede, precio y link.",
@@ -638,7 +634,7 @@ function baseWelcomeLines() {
     "",
     "Usá los botones para cambiar alertas, ver precios o seguir otros partidos.",
     "",
-    "Los precios son valores 'desde' y pueden cambiar. Tocá Precios M100, M102 o M104 para verlos actualizados."
+    "Los precios son valores 'desde' y pueden cambiar. Tocá Precios M102 o M104 para verlos actualizados."
   ];
 }
 
@@ -1306,7 +1302,7 @@ async function checkSubscriptions() {
 
 async function buildPricesMessage(matchInput) {
   const matchNumber = normalizeMatchInput(matchInput);
-  if (!matchNumber) return "Uso: /precios M100";
+  if (!matchNumber) return "Uso: /precios M102";
 
   const match = filterMatches(await fetchSingleMatchInventory(), { match: matchNumber })[0];
   if (!match) return `No encontre ${matchNumber}.`;
@@ -1370,17 +1366,16 @@ function helpMessage() {
     "",
     "También podés usar los botones de abajo para configurar tus alertas.",
     "",
-    "/seguir M100 barata",
     "/seguir M102 barata",
     "/seguir M104 barata",
     "/seguir M104 all",
-    "/precios M100",
+    "/precios M102",
     "/prioridades",
     "/prioridad <chatId> <numero>",
     "/lista",
     "/menu",
     "/estado",
-    "/quitar M100",
+    "/quitar M102",
     "/reiniciar",
     "/start",
     "",
@@ -1478,7 +1473,7 @@ async function handleTelegramCommands() {
       if (data === "reiniciar") {
         setChatSubscriptions(subscriptionsState, chatId, RESET_SUBSCRIPTIONS);
         markSubscriptionsDirty(chatId);
-        await sendTelegramMessage("Listo. Reinicié tus alertas y dejé M100, M102 y M104 baratas.", {
+        await sendTelegramMessage("Listo. Reinicié tus alertas y dejé M102 y M104 baratas.", {
           chatId,
           replyMarkup: mainMenuKeyboard()
         });
@@ -1688,7 +1683,7 @@ async function handleTelegramCommands() {
     if (command === "/watch" || command === "/seguir") {
       const subscription = parseWatchCommand(text);
       if (!subscription || !isValidMatchNumber(subscription.match)) {
-        await sendTelegramMessage("Uso: /seguir M100 barata, /seguir M102 all o /seguir M104 VIP", { chatId });
+        await sendTelegramMessage("Uso: /seguir M102 barata, /seguir M104 all o /seguir M104 VIP", { chatId });
         continue;
       }
 
@@ -1713,7 +1708,7 @@ async function handleTelegramCommands() {
     if (command === "/remove" || command === "/quitar") {
       const match = normalizeMatchInput(text.split(/\s+/)[1]);
       if (!match) {
-        await sendTelegramMessage("Uso: /quitar M100", { chatId });
+        await sendTelegramMessage("Uso: /quitar M102", { chatId });
         continue;
       }
 
@@ -1731,7 +1726,7 @@ async function handleTelegramCommands() {
     if (command === "/reset" || command === "/reiniciar") {
       setChatSubscriptions(subscriptionsState, chatId, RESET_SUBSCRIPTIONS);
       markSubscriptionsDirty(chatId);
-      await sendTelegramMessage("Listo. Reinicié tus alertas y dejé M100, M102 y M104 baratas.", {
+      await sendTelegramMessage("Listo. Reinicié tus alertas y dejé M102 y M104 baratas.", {
         chatId,
         replyMarkup: mainMenuKeyboard()
       });

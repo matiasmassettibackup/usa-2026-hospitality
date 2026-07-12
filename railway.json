@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "node src/monitor.js --match M100,M102,M104 --cheapest-per-category --interval 60",
+    "startCommand": "node src/monitor.js --match M102,M104 --cheapest-per-category --interval 60",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }

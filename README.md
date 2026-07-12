@@ -23,13 +23,12 @@ Cuando una alerta usa `all`, el bot consulta también lounges/secciones y elige 
 
 El monitor escucha por defecto:
 
-- `M100`
 - `M102`
 - `M104`
 
 ## Comandos
 
-Chequeo puntual de M100, M102 y M104, por defecto en la entrada más barata de cada categoría:
+Chequeo puntual de M102 y M104, por defecto en la entrada más barata de cada categoría:
 
 ```bash
 npm run check
@@ -50,20 +49,20 @@ npm run list-dallas
 Ejemplos directos:
 
 ```bash
-node src/monitor.js --once --match M100
-node src/monitor.js --once --match M100,M102,M104 --cheapest-per-category
-node src/monitor.js --match M100 --cheapest-per-category --interval 30
+node src/monitor.js --once --match M102
+node src/monitor.js --once --match M102,M104 --cheapest-per-category
+node src/monitor.js --match M102 --cheapest-per-category --interval 30
 node src/monitor.js --once --venue NN_DAL
 node src/monitor.js --once --team Argentina
-node src/monitor.js --once --match M100 --all-sections
+node src/monitor.js --once --match M104 --all-sections
 node src/monitor.js --once --match M104 --section "VIP Lounge"
 ```
 
 El monitor guarda estado en `.state/hospitality-monitor.json` para detectar el cambio `unavailable -> available` por sección y emitir `ALERT:`.
 
-El default operativo de alertas guardadas es `M100`, `M102` y `M104` como `--cheapest-per-category`: revisa sólo la entrada más barata dentro de cada categoría/lounge de hospitalidad para esos partidos. Si querés volver a escuchar absolutamente todo, usá `--all-sections` o `/seguir M104 all`.
+El default operativo de alertas guardadas es `M102` y `M104` como `--cheapest-per-category`: revisa sólo la entrada más barata dentro de cada categoría/lounge de hospitalidad para esos partidos. Si querés volver a escuchar absolutamente todo, usá `--all-sections` o `/seguir M104 all`.
 
-Además, el bot mantiene un CSV compacto de eventos de disponibilidad para `M100`, `M102` y `M104`:
+Además, el bot mantiene un CSV compacto de eventos de disponibilidad para `M102` y `M104`:
 
 ```text
 /Users/matiasmassetti/.fifa-hospitality-monitor/.state/availability-events.csv
@@ -102,7 +101,7 @@ Para probar el envío:
 npm run telegram:test
 ```
 
-Cuando `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` están configurados, `npm run watch` manda Telegram automáticamente sólo cuando detecta que la sección monitoreada pasa a disponible. Por defecto, los botones principales agregan `M100`, `M102` y `M104` como `barata`, que significa la entrada más barata de cada categoría/lounge.
+Cuando `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` están configurados, `npm run watch` manda Telegram automáticamente sólo cuando detecta que la sección monitoreada pasa a disponible. Por defecto, los botones principales agregan `M102` y `M104` como `barata`, que significa la entrada más barata de cada categoría/lounge.
 
 Las alertas incluyen la sección exacta y cantidad disponible si FIFA la informa. El botón `Crear carrito` vuelve a validar disponibilidad y, si la sección sigue disponible, crea una orden en FIFA y responde con el link oficial de carrito. El botón `Abrir FIFA manual` queda como fallback.
 
@@ -132,20 +131,19 @@ El bot también responde `/start` con una bienvenida en español. Si existe `ass
 Comandos disponibles para usuarios:
 
 ```text
-/seguir M100 all
 /seguir M102 barata
 /seguir M104 all
-/precios M100
+/precios M102
 /prioridades
 /prioridad <chatId> <numero>
 /lista
-/quitar M100
+/quitar M102
 /reiniciar
 /ayuda
 ```
 
 `/prioridad` y `/prioridades` son comandos admin. Por defecto el admin es `TELEGRAM_CHAT_ID`; se puede configurar una lista separada con `ADMIN_CHAT_IDS=123,456`.
-`/reiniciar` y el botón `Reiniciar alertas` dejan al usuario con `M100`, `M102` y `M104` en la entrada más barata por categoría.
+`/reiniciar` y el botón `Reiniciar alertas` dejan al usuario con `M102` y `M104` en la entrada más barata por categoría.
 
 Las preferencias se guardan localmente por chat en:
 
@@ -275,7 +273,7 @@ BOOTSTRAP_SUBSCRIPTIONS_JSON={...}
 4. En Settings/Deploy, confirmar que el start command sea:
 
 ```bash
-node src/monitor.js --match M100,M102,M104 --cheapest-per-category --interval 60
+node src/monitor.js --match M102,M104 --cheapest-per-category --interval 60
 ```
 5. Para conservar usuarios/prioridades actuales, usar una de estas opciones:
 
