@@ -6,8 +6,8 @@
   "scripts": {
     "start": "npm run watch",
     "test": "node --test test/*.test.js && node --check src/monitor.js && node --check src/dashboard.js",
-    "check": "node src/monitor.js --once --match M102,M104 --cheapest-per-category",
-    "watch": "node src/monitor.js --match M102,M104 --cheapest-per-category --interval 60",
+    "check": "node src/monitor.js --once --match M104 --cheapest-per-category",
+    "watch": "node src/monitor.js --match M104 --cheapest-per-category --interval 60",
     "dashboard": "node src/dashboard.js",
     "list-dallas": "node src/monitor.js --once --venue NN_DAL",
     "db:migrate-state": "node scripts/migrate-state-to-postgres.mjs",
