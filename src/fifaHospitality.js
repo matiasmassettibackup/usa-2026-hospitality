@@ -147,9 +147,11 @@ export function getAvailableOptions(match) {
     .sort((a, b) => a.amount - b.amount);
 }
 
-export function getHospitalityOptions(lounges, { section, sectionCode, allSections = false, cheapestPerCategory = false } = {}) {
+export function getHospitalityOptions(lounges, { section, sectionCode, allSections = false, cheapestPerCategory = false, maxPriceUsd } = {}) {
   const targetSection = section?.trim().toLowerCase();
   const targetCode = sectionCode?.trim().toUpperCase();
+  const priceLimit = Number(maxPriceUsd);
+  const hasPriceLimit = Number.isFinite(priceLimit);
 
   return (lounges || [])
     .flatMap((lounge) => {
@@ -172,6 +174,7 @@ export function getHospitalityOptions(lounges, { section, sectionCode, allSectio
           )
         }))
         .filter((option) => {
+          if (hasPriceLimit && option.amount > priceLimit) return false;
           if (allSections || cheapestPerCategory) return true;
           if (targetCode) return option.sectionCode?.toUpperCase() === targetCode;
           if (targetSection) return option.sectionName?.toLowerCase().includes(targetSection);
@@ -182,6 +185,7 @@ export function getHospitalityOptions(lounges, { section, sectionCode, allSectio
       return cheapestPerCategory ? options.slice(0, 1) : options;
     })
     .filter((option) => {
+      if (hasPriceLimit && option.amount > priceLimit) return false;
       if (allSections || cheapestPerCategory) return true;
       if (targetCode) return option.sectionCode?.toUpperCase() === targetCode;
       if (targetSection) return option.sectionName?.toLowerCase().includes(targetSection);

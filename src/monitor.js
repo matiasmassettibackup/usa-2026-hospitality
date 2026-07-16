@@ -307,15 +307,19 @@ function subscriptionKey(subscription) {
     : subscription.allSections
     ? "all"
     : subscription.sectionCode || subscription.section || DEFAULT_SECTION;
-  return `${subscription.match}:${scope}`;
+  const maxPrice = Number(subscription.maxPriceUsd);
+  const priceScope = Number.isFinite(maxPrice) ? `:max${maxPrice}` : "";
+  return `${subscription.match}:${scope}${priceScope}`;
 }
 
 function formatSubscription(subscription) {
-  const scope = subscription.cheapestPerCategory
+  let scope = subscription.cheapestPerCategory
     ? "mas barata por categoria"
     : subscription.allSections
     ? "todas las categorías"
     : subscription.section || subscription.sectionCode || DEFAULT_SECTION;
+  const maxPrice = Number(subscription.maxPriceUsd);
+  if (Number.isFinite(maxPrice)) scope += ` hasta ${formatMoney(maxPrice)}`;
   return `${subscription.match} - ${scope}`;
 }
 
@@ -861,7 +865,8 @@ async function summarizeSubscription(match, subscription) {
     section: subscription.section,
     sectionCode: subscription.sectionCode,
     allSections: subscription.allSections,
-    cheapestPerCategory: subscription.cheapestPerCategory
+    cheapestPerCategory: subscription.cheapestPerCategory,
+    maxPriceUsd: subscription.maxPriceUsd
   });
 
   return summarizeMatch(match, { hospitalityOptions });

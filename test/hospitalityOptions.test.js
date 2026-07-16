@@ -58,3 +58,9 @@ test("allSections still returns every seating section", () => {
 
   assert.deepEqual(options.map((option) => option.sectionCode), ["FIFA-A", "PITCH-B", "PITCH-A"]);
 });
+
+test("maxPriceUsd limits selected seating sections", () => {
+  const options = getHospitalityOptions(lounges, { allSections: true, maxPriceUsd: 6999 });
+
+  assert.deepEqual(options.map((option) => option.sectionCode), ["FIFA-A"]);
+});

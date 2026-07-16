@@ -203,6 +203,14 @@ Ejemplo de suscripción con cantidad deseada:
 
 Si aparecen dos o más entradas, el carrito automático intenta pedir 2; si aparece sólo una, pide 1. Si sobra disponibilidad y `AUTO_CART_MAX_PER_EVENT` lo permite, el resto se reparte al siguiente usuario por prioridad.
 
+Ejemplo de suscripción para avisar por cualquier categoría disponible hasta cierto precio:
+
+```json
+{ "match": "M104", "allSections": true, "maxPriceUsd": 7999 }
+```
+
+Ese filtro revisa todas las secciones del partido y sólo dispara cuando FIFA muestra una opción disponible con precio menor o igual al valor configurado.
+
 ## Correr 24/7 en macOS
 
 La opción gratuita/local es `launchd`, el supervisor nativo de macOS.

@@ -11,15 +11,23 @@ const DEFAULT_SUBSCRIPTIONS = [
 ];
 
 function subscriptionScope(subscription) {
-  if (subscription.cheapestPerCategory) return "cheapest";
-  if (subscription.allSections) return "all";
-  return subscription.sectionCode || subscription.section || "Suite Essentials";
+  const base = subscription.cheapestPerCategory
+    ? "cheapest"
+    : subscription.allSections
+    ? "all"
+    : subscription.sectionCode || subscription.section || "Suite Essentials";
+  const maxPrice = Number(subscription.maxPriceUsd);
+  return Number.isFinite(maxPrice) ? `${base}:max${maxPrice}` : base;
 }
 
 function subscriptionLabel(subscription) {
-  if (subscription.cheapestPerCategory) return "mas barata por categoria";
-  if (subscription.allSections) return "todas las categorias";
-  return subscription.section || subscription.sectionCode || "Suite Essentials";
+  const base = subscription.cheapestPerCategory
+    ? "mas barata por categoria"
+    : subscription.allSections
+    ? "todas las categorias"
+    : subscription.section || subscription.sectionCode || "Suite Essentials";
+  const maxPrice = Number(subscription.maxPriceUsd);
+  return Number.isFinite(maxPrice) ? `${base} hasta ${formatMoney(maxPrice)}` : base;
 }
 
 function stateKey(chatId, subscription) {
